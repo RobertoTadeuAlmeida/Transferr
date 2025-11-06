@@ -6,11 +6,11 @@ class Excursion {
   final String id;
   final String name;
   final DateTime date;
-  final double price; // Preço por participante
-  final int totalSeats; // Capacidade total da excursão
+  final double price;
+  final int totalSeats;
   final String location;
   final String description;
-  String status; // 'Planejada', 'Confirmada', 'Cancelada', 'Realizada'
+  String status;
 
   // Informações sobre os participantes/clientes
 
@@ -44,13 +44,9 @@ class Excursion {
     return totalClientsConfirmed * price;
   }
 
-  // netRevenue pode ser mais complexo se envolver custos.
-  // Se for simplesmente grossRevenue - alguma taxa fixa, pode ser um getter.
-  // Se os custos variam por excursão e são armazenados, adicione um campo 'costs'
-  // e calcule aqui. Por enquanto, vamos assumir que é igual ao grossRevenue para simplificar.
   double get netRevenue {
     // Exemplo: return grossRevenue - (custosDaExcursao ?? 0.0);
-    return grossRevenue; // Simplificado por enquanto
+    return grossRevenue;
   }
 
   int get totalPaymentsMade {
@@ -82,8 +78,6 @@ class Excursion {
 
   // --- MÉTODOS UTILITÁRIOS ---
 
-  // Você já tem um getStatusColor no Provider, mas ele poderia pertencer ao modelo
-  // se o status for uma propriedade bem definida do modelo.
   Color getStatusColor() {
     switch (status.toLowerCase()) {
       case 'planejada':
@@ -92,7 +86,7 @@ class Excursion {
         return Colors.green.shade600;
       case 'cancelada':
         return Colors.red.shade600;
-      case 'realizada': // ou 'finalizada'
+      case 'realizada':
         return Colors.blueGrey.shade600;
       case 'lotada':
         return Colors.orange.shade800;
@@ -125,16 +119,23 @@ class Excursion {
 
   // --- CONSTRUTORES E MÉTODOS DE CONVERSÃO ---
 
-  factory Excursion.fromFirestore(
-    DocumentSnapshot<Map<String, dynamic>> snapshot, [
-    SnapshotOptions? options,
-  ]) {
-    final data = snapshot.data();
-    if (data == null)
-      throw StateError("Missing data for Excursion ${snapshot.id}");
+  Map<String, dynamic> toMap() {
+    return {
+      'name': name,
+      'date': Timestamp.fromDate(date),
+      'price': price,
+      'totalSeats': totalSeats,
+      'location': location,
+      'description': description,
+      'status': status,
+      'participants': participants.map((p) => p.toMap()).toList(),
+    };
+  }
 
+  factory Excursion.fromFirestore(DocumentSnapshot doc) {
+    Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
     return Excursion(
-      id: snapshot.id,
+      id: doc.id,
       name: data['name'] ?? '',
       date: (data['date'] as Timestamp).toDate(),
       price: (data['price'] as num?)?.toDouble() ?? 0.0,
@@ -147,22 +148,7 @@ class Excursion {
               ?.map((p) => Participant.fromMap(p as Map<String, dynamic>))
               .toList() ??
           [],
-      // Os campos calculados não são lidos do Firestore diretamente
     );
-  }
-
-  Map<String, dynamic> toFirestore() {
-    return {
-      'name': name,
-      'date': Timestamp.fromDate(date),
-      'price': price,
-      'totalSeats': totalSeats,
-      'location': location,
-      'description': description,
-      'status': status,
-      'participants': participants.map((p) => p.toMap()).toList(),
-      // Não salvamos campos calculados (getters)
-    };
   }
 
   // Método copyWith (muito útil para imutabilidade e gerenciamento de estado)

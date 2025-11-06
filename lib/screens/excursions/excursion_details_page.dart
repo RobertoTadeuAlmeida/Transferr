@@ -106,13 +106,13 @@ class ExcursionDetailsPage extends StatelessWidget {
                           child: Row(
                             children: [
                               Icon(
-                                participant['status'] == 'confirmado' ? Icons.check_circle : Icons.pending,
-                                color: participant['status'] == 'confirmado' ? Colors.greenAccent : Colors.amberAccent,
+                                participant.status == ParticipantStatus.confirmed ? Icons.check_circle : Icons.pending,
+                                color: participant.status == ParticipantStatus.confirmed ? Colors.greenAccent : Colors.amberAccent,
                               ),
                               const SizedBox(width: 8),
                               Expanded(
                                 child: Text(
-                                  '${participant['clientName']} (${participant['status']})',
+                                  '${participant.clientName} (${participant.status})',
                                   style: const TextStyle(fontSize: 16, color: Colors.white),
                                 ),
                               ),
@@ -121,7 +121,7 @@ class ExcursionDetailsPage extends StatelessWidget {
                                 onPressed: () {
                                   // TODO: Navegar para os detalhes do cliente
                                   ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(content: Text('Ver detalhes de ${participant['clientName']} em breve!')),
+                                    SnackBar(content: Text('Ver detalhes de ${participant.clientName} em breve!')),
                                   );
                                 },
                               ),

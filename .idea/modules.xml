@@ -2,8 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/transferr.iml" filepath="$PROJECT_DIR$/transferr.iml" />
-      <module fileurl="file://$PROJECT_DIR$/android/transferr_android.iml" filepath="$PROJECT_DIR$/android/transferr_android.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/Transferr.iml" filepath="$PROJECT_DIR$/.idea/Transferr.iml" />
     </modules>
   </component>
 </project>

@@ -1,105 +1,110 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import '../models/excursion.dart';
-import '../main.dart';
+import 'package:transferr/models/excursion.dart';
+import 'package:transferr/repositories/excursion_repository.dart';
 
 class ExcursionProvider with ChangeNotifier {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  double totalGrossRevenue = 0.0;
-  double totalNetRevenue = 0.0;
-  int totalClientsConfirmed = 0;
-  int completePayments = 0;
-  int totalPayments = 0;
-  int totalAvailableSeats = 100; // Valor fixo de exemplo por enquanto
-  List<Excursion> excursions = [];
+  final ExcursionRepository _repository = ExcursionRepository();
 
-  // Variável para indicar se os dados estão sendo carregados
+  // O estado que a UI irá ouvir
+  List<Excursion> _excursions = [];
   bool _isLoading = false;
+
+  List<Excursion> get excursions => _excursions;
 
   bool get isLoading => _isLoading;
 
-  // Método para carregar todos os dados do dashboard e as excursões
-  Future<void> loadDashboardData() async {
-    _isLoading = true;
-    notifyListeners(); // Notifica os ouvintes que o carregamento começou
-
-    try {
-      final querySnapshot = await _firestore
-          .collection('artifacts') // OU 'users/${userId}/excursions'
-          .doc(appId) // OU userId
-          .collection('public') // OU remover se for direto em 'excursions'
-          .doc('data') // OU remover
-          .collection('excursions')
-          .get();
-
-      final loadedExcursions = querySnapshot.docs
-          .map(
-            (doc) => Excursion.fromFirestore(
-              doc as DocumentSnapshot<Map<String, dynamic>>,
-            ),
-          ) // Cast aqui
-          .toList();
-
-      double calculatedGross = 0.0;
-      double calculatedNet = 0.0;
-      int confirmedClients = 0;
-      int tempCompletePayments =
-          0; // Para pagamentos completos em todas as excursões
-      int tempTotalRegisteredParticipants =
-          0; // Total de participantes registrados em todas as excursões
-
-      for (var excursion in loadedExcursions) {
-        calculatedGross += excursion.grossRevenue; // Usando o getter do modelo
-        calculatedNet += excursion.netRevenue; // Usando o getter do modelo
-        confirmedClients += excursion.totalClientsConfirmed; // Usando o getter
-        tempTotalRegisteredParticipants += excursion.participants.length;
-        tempCompletePayments += excursion.totalPaymentsMade; // Usando o getter
-      }
-
-      totalGrossRevenue = calculatedGross;
-      totalNetRevenue = calculatedNet;
-      totalClientsConfirmed = confirmedClients;
-      completePayments = tempCompletePayments; // Pagamentos totais confirmados
-      totalPayments =
-          tempTotalRegisteredParticipants; // Total de pessoas registradas (independente do status de pagamento)
-
-      // totalAvailableSeats no dashboard pode ser a soma dos availableSeats de todas as excursões futuras
-      // ou um valor fixo se você tiver uma capacidade geral.
-      // Se for a soma:
-      totalAvailableSeats = loadedExcursions
-          .where(
-            (ex) => !ex.hasPassed && ex.status != 'Cancelada',
-          ) // Excursões futuras e não canceladas
-          .fold(
-            0,
-            (sum, ex) => sum + ex.availableSeats,
-          ); // Soma dos assentos disponíveis
-
-      excursions = loadedExcursions;
-
-      notifyListeners();
-    } catch (e) {
-      print("Erro ao carregar dados do dashboard: $e");
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
+  // Calcula a receita bruta total de todas as excursões
+  double get totalGrossRevenue {
+    return _excursions.fold(
+      0.0,
+      (sum, excursion) => sum + excursion.grossRevenue,
+    );
   }
 
-  // Helper para obter a cor do status
+  // Calcula a receita líquida total
+  double get totalNetRevenue {
+    return _excursions.fold(
+      0.0,
+      (sum, excursion) => sum + excursion.netRevenue,
+    );
+  }
+
+  // Calcula total de clientes confirmados (assentos ocupados)
+  int get totalClientsConfirmed {
+    return _excursions.fold(
+      0,
+      (sum, excursion) => sum + excursion.totalClientsConfirmed,
+    );
+  }
+
+  // ------ EXEMPLOS PARA PAGAMENTOS E ASSENTOS ------
+  int get totalAvailableSeats {
+    const int totalCapacity = 67;
+    return totalCapacity - totalClientsConfirmed;
+  }
+
+  int get totalPayments {
+    return _excursions.fold(
+      0,
+      (sum, excursion) => sum + (excursion.participants?.length ?? 0),
+    );
+  }
+
+  int get completePayments {
+    int count = 0;
+    for (var excursion in _excursions) {
+      count +=
+          excursion.participants
+              ?.where((p) => p.paymentStatus == PaymentStatus.paid)
+              .length ??
+          0;
+    }
+    return count;
+  }
+
+  // ------ FIM DOS EXEMPLOS ------)
+
+  ExcursionProvider() {
+    // Inicia ouvindo as mudanças no banco de dados assim que o provider é criado.
+    _listenToExcursions();
+  }
+
+  void _listenToExcursions() {
+    _isLoading = true;
+    notifyListeners();
+
+    _repository.getExcursionsStream().listen((excursionsList) {
+      _excursions = excursionsList;
+      _isLoading = false;
+      notifyListeners(); // Notifica a UI que a lista foi atualizada!
+    });
+  }
+
+  // Funções CRUD que a UI pode chamar
+  Future<void> addExcursion(Excursion newExcursion) async {
+    await _repository.addExcursion(newExcursion);
+    // Não precisa chamar notifyListeners(), pois a Stream já faz isso!
+  }
+
+  Future<void> updateExcursion(Excursion updatedExcursion) async {
+    await _repository.updateExcursion(updatedExcursion);
+  }
+
+  Future<void> deleteExcursion(String excursionId) async {
+    await _repository.deleteExcursion(excursionId as Excursion);
+  }
+
   Color getStatusColor(String status) {
-    switch (status) {
-      case 'Agendada':
-        return Colors.orange.shade600;
-      case 'Confirmada':
-        return Colors.green.shade600;
-      case 'Cancelada':
-        return Colors.red.shade600;
-      case 'Finalizada':
-        return Colors.blueGrey.shade600;
+    switch (status.toLowerCase()) {
+      case 'agendada':
+        return Colors.blueAccent;
+      case 'confirmada':
+        return Colors.greenAccent;
+      case 'cancelada':
+        return Colors.redAccent;
       default:
         return Colors.grey;
     }
   }
+
 }

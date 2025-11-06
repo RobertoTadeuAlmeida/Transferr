@@ -35,11 +35,6 @@ class HomePage extends StatelessWidget {
           ),
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            // Chama o método do provider para recarregar os dados
-            onPressed: () => excursionProvider.loadDashboardData(),
-          ),
         ],
       ),
       drawer: Drawer(
