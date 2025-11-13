@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:transferr/main.dart';
 import '../providers/excursion_provider.dart';
-import '../models/excursion.dart';
-import '../models/client.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+
+import 'excursions/add_edit_excursion_page.dart';
 
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
@@ -19,9 +17,13 @@ class HomePage extends StatelessWidget {
     double paymentsPercentage = excursionProvider.totalPayments > 0
         ? (excursionProvider.completePayments / excursionProvider.totalPayments)
         : 0.0;
-    double seatsPercentage = excursionProvider.totalAvailableSeats > 0
-        ? (excursionProvider.totalAvailableSeats / 100.0)
-        : 0.0;
+    // Calcula o total de assentos de todas as excursões
+    int totalSeatsOfAllExcursions = excursionProvider.excursions
+        .fold(0, (sum, excursion) => sum + excursion.totalSeats);
+    // Calcula a porcentagem de assentos disponíveis
+    double seatsPercentage = totalSeatsOfAllExcursions > 0
+        ? (excursionProvider.totalClientsConfirmed / totalSeatsOfAllExcursions)
+        : 0.0 ;
 
     return Scaffold(
       appBar: AppBar(
@@ -34,8 +36,7 @@ class HomePage extends StatelessWidget {
             },
           ),
         ),
-        actions: [
-        ],
+        actions: [],
       ),
       drawer: Drawer(
         child: ListView(
@@ -71,6 +72,7 @@ class HomePage extends StatelessWidget {
               ),
               onTap: () {
                 Navigator.pop(context);
+                Navigator.pushNamed(context, '/');
               },
             ),
             ListTile(
@@ -144,8 +146,8 @@ class HomePage extends StatelessWidget {
                       Expanded(
                         child: _buildDashboardCard(
                           context,
-                          'Assentos disponíveis',
-                          '${excursionProvider.totalAvailableSeats}/${100}',
+                          'Assentos Ocupados',
+                          '${excursionProvider.totalClientsConfirmed}/${totalSeatsOfAllExcursions}',
                           seatsPercentage,
                         ),
                       ),
@@ -209,12 +211,16 @@ class HomePage extends StatelessWidget {
                           borderRadius: BorderRadius.circular(12.0),
                         ),
                         color: const Color(0xFF2A2A2A),
+                        clipBehavior: Clip.antiAlias,
                         child: InkWell(
                           onTap: () {
+                            print(
+                              'CLICOU!!! Navegando para detalhes da excursão com ID: ${excursion.id}',
+                            );
                             Navigator.pushNamed(
                               context,
                               '/excursion_details',
-                              arguments: excursion,
+                              arguments: excursion.id,
                             );
                           },
                           borderRadius: BorderRadius.circular(12.0),
@@ -250,14 +256,17 @@ class HomePage extends StatelessWidget {
                                 Align(
                                   alignment: Alignment.bottomRight,
                                   child: Chip(
-                                    label: Text(excursion.status),
+                                    label: Text(
+                                      excursion.status
+                                          .toString()
+                                          .split('.')
+                                          .last,
+                                    ),
                                     backgroundColor: excursionProvider
-                                        .getStatusColor(excursion.status)
+                                        .getStatusColor(ExcursionStatus.agendada)
                                         .withOpacity(0.2),
                                     labelStyle: TextStyle(
-                                      color: excursionProvider.getStatusColor(
-                                        excursion.status,
-                                      ),
+                                      color: excursionProvider.getStatusColor(ExcursionStatus.agendada),
                                       fontWeight: FontWeight.bold,
                                     ),
                                   ),
@@ -274,10 +283,9 @@ class HomePage extends StatelessWidget {
             ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () {
-          addExcursionToFirestore();
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Funcionalidade de adicionar excursão em breve!'),
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) => const AddEditExcursionPage(excursion: null),
             ),
           );
         },

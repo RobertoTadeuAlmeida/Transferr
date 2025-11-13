@@ -69,20 +69,18 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'App de Gerenciamento de Excursões',
+      title: 'Transferr',
       theme: ThemeData(
         scaffoldBackgroundColor: const Color(0xFF1A1A1A),
         fontFamily: 'Inter',
         visualDensity: VisualDensity.adaptivePlatformDensity,
         appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFF1A1A1A), // AppBar transparente/escura
+          backgroundColor: Color(0xFF1A1A1A),
           foregroundColor: Colors.white,
-          elevation: 0, // Sem sombra na AppBar
-          iconTheme: IconThemeData(color: Colors.white), // Ícones brancos
+          elevation: 0,
+          iconTheme: IconThemeData(color: Colors.white),
         ),
-        drawerTheme: const DrawerThemeData(
-          backgroundColor: Color(0xFF1A1A1A), // Fundo do Drawer escuro
-        ),
+        drawerTheme: const DrawerThemeData(backgroundColor: Color(0xFF1A1A1A)),
         colorScheme: const ColorScheme.dark(
           primary: Color(0xFFF97316),
           surface: Color(0xFF1A1A1A),
@@ -107,8 +105,10 @@ class MyApp extends StatelessWidget {
         ),
         elevatedButtonTheme: ElevatedButtonThemeData(
           style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFFF97316), // Cor de fundo dos botões
-            foregroundColor: Colors.white, // Cor do texto dos botões
+            backgroundColor: const Color(0xFFF97316),
+            // Cor de fundo dos botões
+            foregroundColor: Colors.white,
+            // Cor do texto dos botões
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(
                 10.0,
@@ -135,10 +135,13 @@ class MyApp extends StatelessWidget {
       initialRoute: '/',
       routes: {
         '/': (context) => const HomePage(),
-        // TODO: Atualizar as outras telas para usar Provider
-        '/excursion_details': (context) => ExcursionDetailsPage(
-          excursion: ModalRoute.of(context)!.settings.arguments as Excursion,
-        ),
+        // ROTAS CORRIGIDAS
+        '/excursion_details': (context) {
+          final String excursionId =
+              ModalRoute.of(context)!.settings.arguments as String;
+          return ExcursionDetailsPage(excursionId: excursionId);
+        },
+        // TODO: Fazer o mesmo para as rotas de cliente
         '/clients': (context) => const ClientsListPage(),
         '/client_details': (context) => ClientDetailsPage(
           client: ModalRoute.of(context)!.settings.arguments as Client,
