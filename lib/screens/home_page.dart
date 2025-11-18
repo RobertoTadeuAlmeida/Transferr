@@ -257,16 +257,13 @@ class HomePage extends StatelessWidget {
                                   alignment: Alignment.bottomRight,
                                   child: Chip(
                                     label: Text(
-                                      excursion.status
-                                          .toString()
-                                          .split('.')
-                                          .last,
+                                      excursion.status.name[0].toUpperCase() + excursion.status.name.substring(1),
                                     ),
                                     backgroundColor: excursionProvider
-                                        .getStatusColor(ExcursionStatus.agendada)
+                                        .getStatusColor(excursion.status)
                                         .withOpacity(0.2),
                                     labelStyle: TextStyle(
-                                      color: excursionProvider.getStatusColor(ExcursionStatus.agendada),
+                                      color: excursionProvider.getStatusColor(excursion.status),
                                       fontWeight: FontWeight.bold,
                                     ),
                                   ),

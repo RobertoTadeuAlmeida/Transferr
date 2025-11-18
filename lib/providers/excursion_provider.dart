@@ -147,15 +147,10 @@ class ExcursionProvider with ChangeNotifier {
     try {
       return _excursions.firstWhere((excursion) => excursion.id == excursionId);
     } catch (e) {
-      // Isso é normal, acontece quando `firstWhere` não encontra um item.
       return null;
     }
   }
 
-  // --- Limpeza ---
-
-  /// [CORREÇÃO CRÍTICA] Cancela a inscrição da stream ao destruir o provider
-  /// para evitar vazamentos de memória (memory leaks).
   @override
   void dispose() {
     print('[Provider] Dispose chamado. Cancelando a inscrição da stream.');

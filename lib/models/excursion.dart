@@ -10,10 +10,7 @@ class Excursion {
   final int totalSeats;
   final String location;
   final String description;
-  final ExcursionStatus? status;
-
-  // Informações sobre os participantes/clientes
-
+  final ExcursionStatus status;
   final List<Participant> participants; // Lista de participantes
 
   Excursion({
@@ -24,9 +21,9 @@ class Excursion {
     required this.totalSeats,
     required this.location,
     this.description = '',
-    required this.status,
+    ExcursionStatus? status,
     this.participants = const [],
-  });
+  }): status = status ?? ExcursionStatus.agendada;
 
   // --- GETTERS (Campos Calculados) ---
 
@@ -104,6 +101,14 @@ class Excursion {
 
   factory Excursion.fromFirestore(DocumentSnapshot doc) {
     Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
+
+    String statusString = data['status'] ?? 'agendada';
+
+    ExcursionStatus statusEnum = ExcursionStatus.values.firstWhere(
+      (e) => e.name == statusString,
+      orElse: () => ExcursionStatus.agendada,
+    );
+
     return Excursion(
       id: doc.id,
       name: data['name'] ?? '',
@@ -112,10 +117,8 @@ class Excursion {
       totalSeats: data['totalSeats'] as int? ?? 0,
       location: data['location'] ?? '',
       description: data['description'] ?? '',
-      status: ExcursionStatus.values.firstWhere(
-        (e) => e.toString().split('.').last == data['status'],
-        orElse: () => ExcursionStatus.agendada,
-      ),
+      status: statusEnum,
+
       participants:
           (data['participants'] as List<dynamic>?)
               ?.map((p) => Participant.fromMap(p as Map<String, dynamic>))

@@ -5,6 +5,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:transferr/firebase_options.dart';
+import 'package:transferr/providers/client_provider.dart';
 import 'dart:convert';
 import 'models/excursion.dart';
 import 'models/client.dart';
@@ -56,7 +57,7 @@ void main() async {
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (context) => ExcursionProvider()),
-        // Você poderia adicionar outros providers aqui, como ClientProvider, etc.
+        ChangeNotifierProvider(create: (context) => ClientProvider()),
       ],
       child: const MyApp(),
     ),
@@ -135,48 +136,22 @@ class MyApp extends StatelessWidget {
       initialRoute: '/',
       routes: {
         '/': (context) => const HomePage(),
-        // ROTAS CORRIGIDAS
+        // Rotas adicionadas
         '/excursion_details': (context) {
           final String excursionId =
               ModalRoute.of(context)!.settings.arguments as String;
           return ExcursionDetailsPage(excursionId: excursionId);
         },
-        // TODO: Fazer o mesmo para as rotas de cliente
+        //Rotas adicionadas
         '/clients': (context) => const ClientsListPage(),
-        '/client_details': (context) => ClientDetailsPage(
-          client: ModalRoute.of(context)!.settings.arguments as Client,
-        ),
+        '/client_details': (context) {
+          final String clientId =
+              ModalRoute.of(context)!.settings.arguments as String;
+          return ClientDetailsPage(clientId: clientId);
+        },
+
         '/finance': (context) => const FinancePage(),
       },
     );
-  }
-}
-
-void addExcursionToFirestore() async {
-  // Objeto de dados (semelhante a um JSON) para a nova excursão.
-  // Em Dart, usamos um Map<String, dynamic>.
-  final Map<String, dynamic> newExcursionData = {
-    'name': 'Trilha da Cachoeira',
-    'date': '2025-10-26',
-    'price': 150.00,
-    'status': 'Agendada',
-    'grossRevenue': 0.0,
-    'netRevenue': 0.0,
-    'totalClientsConfirmed': 0,
-  };
-
-  try {
-    // Obter a instância do Firestore.
-    final db = FirebaseFirestore.instance;
-
-    // Adicionar o novo documento à coleção 'excursions'.
-    // O Firestore gerará um ID único para este novo documento.
-    await db.collection('excursions').add(newExcursionData);
-
-    print(
-      'Excursão "Trilha da Cachoeira" adicionada com sucesso ao Firestore!',
-    );
-  } catch (e) {
-    print('Erro ao adicionar excursão ao Firestore: $e');
   }
 }
