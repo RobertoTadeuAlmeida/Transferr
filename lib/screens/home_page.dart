@@ -18,12 +18,14 @@ class HomePage extends StatelessWidget {
         ? (excursionProvider.completePayments / excursionProvider.totalPayments)
         : 0.0;
     // Calcula o total de assentos de todas as excursões
-    int totalSeatsOfAllExcursions = excursionProvider.excursions
-        .fold(0, (sum, excursion) => sum + excursion.totalSeats);
+    int totalSeatsOfAllExcursions = excursionProvider.excursions.fold(
+      0,
+      (sum, excursion) => sum + excursion.totalSeats,
+    );
     // Calcula a porcentagem de assentos disponíveis
     double seatsPercentage = totalSeatsOfAllExcursions > 0
         ? (excursionProvider.totalClientsConfirmed / totalSeatsOfAllExcursions)
-        : 0.0 ;
+        : 0.0;
 
     return Scaffold(
       appBar: AppBar(
@@ -46,19 +48,25 @@ class HomePage extends StatelessWidget {
               decoration: const BoxDecoration(color: Color(0xFFF97316)),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  const Text(
-                    'Menu',
-                    style: TextStyle(
+                  Text(
+                    FirebaseAuth.instance.currentUser?.displayName ??
+                        FirebaseAuth.instance.currentUser?.email
+                            ?.split('@')
+                            ?.first ??
+                        'Usuário',
+                    style: const TextStyle(
                       color: Colors.white,
-                      fontSize: 24,
+                      fontSize: 22,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 4),
                   Text(
-                    // Acessa o ID do usuário diretamente do FirebaseAuth ou de um provider de autenticação
-                    'ID do Usuário: ${FirebaseAuth.instance.currentUser?.uid ?? 'Não Autenticado'}',
+                    // Exibe o e-mail completo do usuário
+                    FirebaseAuth.instance.currentUser?.email ??
+                        'Não autenticado',
                     style: const TextStyle(color: Colors.white70, fontSize: 14),
                   ),
                 ],
@@ -71,8 +79,8 @@ class HomePage extends StatelessWidget {
                 style: TextStyle(color: Colors.white),
               ),
               onTap: () {
+                // Ação para o Dashboard (atualmente, apenas fecha o drawer)
                 Navigator.pop(context);
-                Navigator.pushNamed(context, '/');
               },
             ),
             ListTile(
@@ -82,9 +90,11 @@ class HomePage extends StatelessWidget {
                 style: TextStyle(color: Colors.white),
               ),
               onTap: () {
+                // Ação para a Lista de Excursões (provavelmente navegar para uma tela de lista)
                 Navigator.pop(context);
               },
             ),
+            // --- INÍCIO DOS NOVOS LISTTILES ---
             ListTile(
               leading: const Icon(Icons.people, color: Colors.white),
               title: const Text(
@@ -92,19 +102,23 @@ class HomePage extends StatelessWidget {
                 style: TextStyle(color: Colors.white),
               ),
               onTap: () {
+                // TODO: Navegar para a tela de Clientes
+                // Ex: Navigator.push(context, MaterialPageRoute(builder: (context) => const ClientsPage()));
+                print('Navegar para Clientes');
                 Navigator.pop(context);
-                Navigator.pushNamed(context, '/clients');
               },
             ),
             ListTile(
-              leading: const Icon(Icons.attach_money, color: Colors.white),
+              leading: const Icon(Icons.monetization_on, color: Colors.white),
               title: const Text(
                 'Finanças',
                 style: TextStyle(color: Colors.white),
               ),
               onTap: () {
+                // TODO: Navegar para a tela de Finanças
+                // Ex: Navigator.push(context, MaterialPageRoute(builder: (context) => const FinancePage()));
+                print('Navegar para Finanças');
                 Navigator.pop(context);
-                Navigator.pushNamed(context, '/finance');
               },
             ),
             ListTile(
@@ -114,10 +128,21 @@ class HomePage extends StatelessWidget {
                 style: TextStyle(color: Colors.white),
               ),
               onTap: () {
+                // TODO: Navegar para a tela de Configurações
+                // Ex: Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsPage()));
+                print('Navegar para Configurações');
                 Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Configurações em breve!')),
-                );
+              },
+            ),
+            // --- FIM DOS NOVOS LISTTILES ---
+            const Divider(color: Colors.white38),
+            ListTile(
+              leading: const Icon(Icons.logout, color: Colors.white),
+              title: const Text('Sair', style: TextStyle(color: Colors.white)),
+              onTap: () async {
+                // LÓGICA PARA FAZER LOG OUT
+                await FirebaseAuth.instance.signOut();
+                // O AuthWrapper cuidará de redirecionar para a LoginPage.
               },
             ),
           ],
@@ -257,13 +282,16 @@ class HomePage extends StatelessWidget {
                                   alignment: Alignment.bottomRight,
                                   child: Chip(
                                     label: Text(
-                                      excursion.status.name[0].toUpperCase() + excursion.status.name.substring(1),
+                                      excursion.status.name[0].toUpperCase() +
+                                          excursion.status.name.substring(1),
                                     ),
                                     backgroundColor: excursionProvider
                                         .getStatusColor(excursion.status)
                                         .withOpacity(0.2),
                                     labelStyle: TextStyle(
-                                      color: excursionProvider.getStatusColor(excursion.status),
+                                      color: excursionProvider.getStatusColor(
+                                        excursion.status,
+                                      ),
                                       fontWeight: FontWeight.bold,
                                     ),
                                   ),

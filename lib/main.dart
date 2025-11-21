@@ -6,6 +6,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:transferr/firebase_options.dart';
 import 'package:transferr/providers/client_provider.dart';
+import 'package:transferr/screens/auth_wrapper.dart';
 import 'dart:convert';
 import 'models/excursion.dart';
 import 'models/client.dart';
@@ -32,27 +33,8 @@ final String initialAuthToken = const String.fromEnvironment(
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  final Map<String, dynamic> firebaseConfig = jsonDecode(firebaseConfigString);
-
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
-  try {
-    if (initialAuthToken.isNotEmpty) {
-      await FirebaseAuth.instance.signInWithCustomToken(initialAuthToken);
-      print(
-        'Autenticado com token personalizado: ${FirebaseAuth.instance.currentUser?.uid}',
-      );
-    } else {
-      await FirebaseAuth.instance.signInAnonymously();
-      print(
-        'Autenticado anonimamente: ${FirebaseAuth.instance.currentUser?.uid}',
-      );
-    }
-  } catch (e) {
-    print("Erro na autenticação Firebase: $e");
-  }
-
-  // Envolve o aplicativo com o ChangeNotifierProvider para o ExcursionProvider
   runApp(
     MultiProvider(
       providers: [
@@ -135,7 +117,7 @@ class MyApp extends StatelessWidget {
       ),
       initialRoute: '/',
       routes: {
-        '/': (context) => const HomePage(),
+        '/': (context) => AuthWrapper(),
         // Rotas adicionadas
         '/excursion_details': (context) {
           final String excursionId =
