@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/excursion_provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-
 import 'excursions/add_edit_excursion_page.dart';
+import 'package:transferr/screens/excursions_page.dart';
 
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
@@ -90,8 +90,15 @@ class HomePage extends StatelessWidget {
                 style: TextStyle(color: Colors.white),
               ),
               onTap: () {
-                // Ação para a Lista de Excursões (provavelmente navegar para uma tela de lista)
+                //Fechar o menu antes de navegar
                 Navigator.pop(context);
+                //Navegar para proxima tela
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const ExcursionsPage(),
+                  ),
+                );
               },
             ),
             // --- INÍCIO DOS NOVOS LISTTILES ---
@@ -213,115 +220,100 @@ class HomePage extends StatelessWidget {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 30),
-                  Text(
-                    'Próximas Excursões',
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  // Usa a lista de excursões diretamente do provider
-                  ListView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: excursionProvider.excursions.length,
-                    itemBuilder: (context, index) {
-                      final excursion = excursionProvider.excursions[index];
-                      return Card(
-                        elevation: 2,
-                        margin: const EdgeInsets.symmetric(vertical: 8.0),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12.0),
-                        ),
-                        color: const Color(0xFF2A2A2A),
-                        clipBehavior: Clip.antiAlias,
-                        child: InkWell(
-                          onTap: () {
-                            print(
-                              'CLICOU!!! Navegando para detalhes da excursão com ID: ${excursion.id}',
-                            );
-                            Navigator.pushNamed(
-                              context,
-                              '/excursion_details',
-                              arguments: excursion.id,
-                            );
-                          },
-                          borderRadius: BorderRadius.circular(12.0),
-                          child: Padding(
-                            padding: const EdgeInsets.all(16.0),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  excursion.name,
-                                  style: const TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                                const SizedBox(height: 6),
-                                Text(
-                                  'Data: ${excursion.date.day}/${excursion.date.month}/${excursion.date.year}',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    color: Colors.grey[400],
-                                  ),
-                                ),
-                                Text(
-                                  'Preço: R\$ ${excursion.price.toStringAsFixed(2)}',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    color: Colors.grey[400],
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Align(
-                                  alignment: Alignment.bottomRight,
-                                  child: Chip(
-                                    label: Text(
-                                      excursion.status.name[0].toUpperCase() +
-                                          excursion.status.name.substring(1),
-                                    ),
-                                    backgroundColor: excursionProvider
-                                        .getStatusColor(excursion.status)
-                                        .withOpacity(0.2),
-                                    labelStyle: TextStyle(
-                                      color: excursionProvider.getStatusColor(
-                                        excursion.status,
-                                      ),
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
+                  // const SizedBox(height: 30),
+                  // Text(
+                  //   'Próximas Excursões',
+                  //   style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  //     color: Colors.white,
+                  //     fontWeight: FontWeight.bold,
+                  //   ),
+                  // ),
+                  // const SizedBox(height: 10),
+                  // // Usa a lista de excursões diretamente do provider
+                  // ListView.builder(
+                  //   shrinkWrap: true,
+                  //   physics: const NeverScrollableScrollPhysics(),
+                  //   itemCount: excursionProvider.excursions.length,
+                  //   itemBuilder: (context, index) {
+                  //     final excursion = excursionProvider.excursions[index];
+                  //     return Card(
+                  //       elevation: 2,
+                  //       margin: const EdgeInsets.symmetric(vertical: 8.0),
+                  //       shape: RoundedRectangleBorder(
+                  //         borderRadius: BorderRadius.circular(12.0),
+                  //       ),
+                  //       color: const Color(0xFF2A2A2A),
+                  //       clipBehavior: Clip.antiAlias,
+                  //       child: InkWell(
+                  //         onTap: () {
+                  //           print(
+                  //             'CLICOU!!! Navegando para detalhes da excursão com ID: ${excursion.id}',
+                  //           );
+                  //           Navigator.pushNamed(
+                  //             context,
+                  //             '/excursion_details',
+                  //             arguments: excursion.id,
+                  //           );
+                  //         },
+                  //         borderRadius: BorderRadius.circular(12.0),
+                  //         child: Padding(
+                  //           padding: const EdgeInsets.all(16.0),
+                  //           child: Column(
+                  //             crossAxisAlignment: CrossAxisAlignment.start,
+                  //             children: [
+                  //               Text(
+                  //                 excursion.name,
+                  //                 style: const TextStyle(
+                  //                   fontSize: 18,
+                  //                   fontWeight: FontWeight.bold,
+                  //                   color: Colors.white,
+                  //                 ),
+                  //               ),
+                  //               const SizedBox(height: 6),
+                  //               Text(
+                  //                 'Data: ${excursion.date.day}/${excursion.date.month}/${excursion.date.year}',
+                  //                 style: TextStyle(
+                  //                   fontSize: 14,
+                  //                   color: Colors.grey[400],
+                  //                 ),
+                  //               ),
+                  //               Text(
+                  //                 'Preço: R\$ ${excursion.price.toStringAsFixed(2)}',
+                  //                 style: TextStyle(
+                  //                   fontSize: 14,
+                  //                   color: Colors.grey[400],
+                  //                 ),
+                  //               ),
+                  //               const SizedBox(height: 8),
+                  //               Align(
+                  //                 alignment: Alignment.bottomRight,
+                  //                 child: Chip(
+                  //                   label: Text(
+                  //                     excursion.status.name[0].toUpperCase() +
+                  //                         excursion.status.name.substring(1),
+                  //                   ),
+                  //                   backgroundColor: excursionProvider
+                  //                       .getStatusColor(excursion.status)
+                  //                       .withOpacity(0.2),
+                  //                   labelStyle: TextStyle(
+                  //                     color: excursionProvider.getStatusColor(
+                  //                       excursion.status,
+                  //                     ),
+                  //                     fontWeight: FontWeight.bold,
+                  //                   ),
+                  //                 ),
+                  //               ),
+                  //             ],
+                  //           ),
+                  //         ),
+                  //       ),
+                  //     );
+                  //   },
+                  // ),
                 ],
               ),
             ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (context) => const AddEditExcursionPage(excursion: null),
-            ),
-          );
-        },
-        label: const Text('Nova Excursão'),
-        icon: const Icon(Icons.add),
-        backgroundColor: Theme.of(context).primaryColor,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20.0),
-        ),
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
+
     );
   }
 

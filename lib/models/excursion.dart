@@ -1,9 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:transferr/models/participant.dart';
-import 'package:transferr/providers/excursion_provider.dart';
+import 'enums.dart';
 
 class Excursion {
-  final String id;
+  final String? id;
   final String name;
   final DateTime date;
   final double price;
@@ -14,7 +14,7 @@ class Excursion {
   final List<Participant> participants; // Lista de participantes
 
   Excursion({
-    required this.id,
+    this.id,
     required this.name,
     required this.date,
     required this.price,
@@ -23,7 +23,7 @@ class Excursion {
     this.description = '',
     ExcursionStatus? status,
     this.participants = const [],
-  }): status = status ?? ExcursionStatus.agendada;
+  }): status = status ?? ExcursionStatus.scheduled;
 
   // --- GETTERS (Campos Calculados) ---
 
@@ -106,7 +106,7 @@ class Excursion {
 
     ExcursionStatus statusEnum = ExcursionStatus.values.firstWhere(
       (e) => e.name == statusString,
-      orElse: () => ExcursionStatus.agendada,
+      orElse: () => ExcursionStatus.scheduled,
     );
 
     return Excursion(

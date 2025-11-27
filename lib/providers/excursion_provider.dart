@@ -1,151 +1,170 @@
-import 'dart:async'; // Importado para usar o StreamSubscription
+import 'dart:async';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:transferr/models/excursion.dart';
-import 'package:transferr/repositories/excursion_repository.dart';
-
+import '../models/enums.dart';
 import '../models/participant.dart';
 
-// [MELHORIA] Criei Enums para status. Isso torna o código mais seguro e legível.
-// Você precisará ajustar seu modelo `Excursion` e `Participant` para usar estes Enums em vez de `String`.
-enum ExcursionStatus { agendada, confirmada, realizada, cancelada }
+// Este Enum deve estar em um arquivo de modelo, mas pode ficar aqui temporariamente.
 
 class ExcursionProvider with ChangeNotifier {
-  final ExcursionRepository _repository = ExcursionRepository();
-  StreamSubscription? _excursionSubscription; // Para controlar a 'escuta' da stream
+  // --- Estado e Conexão com Firebase ---
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  late final CollectionReference _excursionsRef;
+  StreamSubscription? _excursionSubscription;
 
-  // O estado que a UI irá ouvir
+  double _totalGrossRevenue = 0.0;
+  double _totalNetRevenue = 0.0;
+  int _totalClientsConfirmed = 0;
+  int _totalAvailableSeats = 0;
+  int _totalPayments = 0;
+  int _completePayments = 0;
+
+
   List<Excursion> _excursions = [];
-  bool _isLoading = true; // Inicia como true por padrão
+  bool _isLoading = true;
 
   // --- Getters Públicos ---
   List<Excursion> get excursions => _excursions;
+
   bool get isLoading => _isLoading;
 
-  // --- Getters Calculados ---
-  double get totalGrossRevenue => _excursions.fold(
-      0.0, (sum, excursion) => sum + excursion.grossRevenue);
+  double get totalGrossRevenue => _totalGrossRevenue;
 
-  double get totalNetRevenue =>
-      _excursions.fold(0.0, (sum, excursion) => sum + excursion.netRevenue);
+  double get totalNetRevenue => _totalNetRevenue;
 
-  int get totalClientsConfirmed => _excursions.fold(
-      0, (sum, excursion) => sum + excursion.totalClientsConfirmed);
+  int get totalClientsConfirmed => _totalClientsConfirmed;
 
-  // ------ EXEMPLOS (mantidos da sua versão) ------
-  int get totalAvailableSeats {
-    const int totalCapacity = 67; // Considere mover isso para uma constante global
-    return totalCapacity - totalClientsConfirmed;
-  }
+  int get totalAvailableSeats => _totalAvailableSeats;
 
-  int get totalPayments => _excursions.fold(
-      0, (sum, excursion) => sum + (excursion.participants.length));
+  int get totalPayments => _totalPayments;
 
-  int get completePayments {
-    int count = 0;
-    for (var excursion in _excursions) {
-      count += excursion.participants
-          .where((p) => p.paymentStatus == PaymentStatus.paid)
-          .length;
-    }
-    return count;
-  }
+  int get completePayments => _completePayments;
 
-  // --- Construtor ---
   ExcursionProvider() {
-    // Inicia ouvindo as mudanças no banco de dados assim que o provider é criado.
-    _listenToExcursions();
+    _excursionsRef = _firestore.collection('excursions');
+    listenToExcursions();
   }
 
-  /// Inicia a escuta da stream de excursões e lida com dados, erros e finalização.
-  void _listenToExcursions() {
-    print('[Provider] Iniciando escuta da stream de excursões...');
-    if (!_isLoading) {
-      _isLoading = true;
-      notifyListeners();
-    }
+  // --- Lógica de "Ouvinte" em Tempo Real ---
+  void listenToExcursions() {
+    _isLoading = true;
+    notifyListeners();
 
-    _excursionSubscription = _repository.getExcursionsStream().listen(
-          (excursionsList) {
-        print(
-            '[Provider] Dados recebidos da stream! Quantidade: ${excursionsList.length}');
-        _excursions = excursionsList;
+    _excursionSubscription?.cancel(); // Cancela ouvintes antigos
+
+    _excursionSubscription = _excursionsRef
+        .orderBy('date', descending: false)
+        .snapshots() // A mágica do tempo real!
+        .listen(
+          (QuerySnapshot snapshot) {
+        _excursions = snapshot.docs.map((doc) {
+          // O cast para DocumentSnapshot é importante
+          return Excursion.fromFirestore(
+              doc as DocumentSnapshot<Map<String, dynamic>>);
+        }).toList();
+
+        _calculoTotals();
+
+        // Só muda o estado de loading na primeira carga bem-sucedida
         if (_isLoading) {
           _isLoading = false;
         }
-        notifyListeners(); // Notifica a UI que a lista foi atualizada!
+        notifyListeners(); // Notifica a UI sobre os novos dados
       },
       onError: (error) {
-        print('[Provider] ERRO CRÍTICO na stream: $error');
-        if (_isLoading) {
-          _isLoading = false;
-        }
-        notifyListeners(); // Notifica a UI sobre o erro para parar o loading
-      },
-      onDone: () {
-        print('[Provider] A stream de excursões foi fechada pelo servidor.');
-        if (_isLoading) {
-          _isLoading = false;
-        }
+        print("====== ERRO NO STREAM DO FIREBASE ======");
+        print("Erro ao ouvir excursões: $error");
+        print(
+            "Verifique as Regras de Segurança do Firestore no console do Firebase!");
+        _isLoading = false;
         notifyListeners();
       },
     );
   }
 
-  // --- Funções CRUD que a UI pode chamar ---
+  void _calculoTotals() {
+    double tempGross = 0;
+    double tempNet = 0;
+    int tempClients = 0;
+    int tempTotalPayments = 0;
+    int tempCompletePayments = 0;
+    const int totalCapacity = 67; // Mova para uma constante global se preferir
 
-  /// Adiciona uma nova excursão ao Firestore.
+    // Itera sobre a lista uma única vez para calcular tudo.
+    for (final excursion in _excursions) {
+      tempGross += excursion.grossRevenue;
+      tempNet += excursion.netRevenue;
+      tempClients += excursion.totalClientsConfirmed;
+      tempTotalPayments += excursion.participants.length;
+      tempCompletePayments += excursion.participants
+          .where((p) => p.paymentStatus == PaymentStatus.paid)
+          .length;
+    }
+
+    // Atualiza as variáveis de estado
+    _totalGrossRevenue = tempGross;
+    _totalNetRevenue = tempNet;
+    _totalClientsConfirmed = tempClients;
+    _totalAvailableSeats = totalCapacity - _totalClientsConfirmed;
+    _totalPayments = tempTotalPayments;
+    _completePayments = tempCompletePayments;
+  }
+
+  // --- Funções CRUD (Create, Read, Update, Delete) ---
+
   Future<void> addExcursion(Excursion newExcursion) async {
     try {
-      await _repository.addExcursion(newExcursion);
-      // Não precisa chamar notifyListeners(), pois a Stream já faz isso automaticamente.
+      await _excursionsRef.add(newExcursion.toMap());
     } catch (e) {
       print('Erro ao adicionar excursão: $e');
-      rethrow; // Relança o erro para a UI (se ela quiser mostrar um SnackBar, por exemplo)
+      throw e;
     }
   }
 
-  /// Atualiza uma excursão existente no Firestore.
   Future<void> updateExcursion(Excursion updatedExcursion) async {
+    if (updatedExcursion.id == null) {
+      throw Exception('ID da excursão não pode ser nulo para atualização.');
+    }
     try {
-      await _repository.updateExcursion(updatedExcursion);
+      await _excursionsRef.doc(updatedExcursion.id).update(
+          updatedExcursion.toMap());
     } catch (e) {
       print('Erro ao atualizar excursão: $e');
-      rethrow;
+      throw e;
     }
   }
 
-  /// Deleta uma excursão do Firestore usando seu ID.
-  Future<void> deleteExcursion(Excursion excursionId) async {
+  // 3. CORRIGIDO: Agora aceita uma String, que é mais simples
+  Future<void> deleteExcursion(String excursionId) async {
     try {
-      // [CORREÇÃO] Passando a String 'excursionId' diretamente.
-      await _repository.deleteExcursion(excursionId);
+      await _excursionsRef.doc(excursionId).delete();
     } catch (e) {
       print('Erro ao deletar excursão: $e');
-      rethrow;
+      throw e;
     }
   }
+
 
   // --- Métodos Utilitários ---
 
-  /// Retorna uma cor baseada no status da excursão.
-  /// [MELHORIA] Usa o Enum 'ExcursionStatus' em vez de String.
   Color getStatusColor(ExcursionStatus status) {
+    // Seu switch de cores está perfeito
     switch (status) {
-      case ExcursionStatus.agendada:
+      case ExcursionStatus.scheduled:
         return Colors.blueAccent;
-      case ExcursionStatus.confirmada:
+      case ExcursionStatus.confirmed:
         return Colors.greenAccent;
-      case ExcursionStatus.realizada:
+      case ExcursionStatus.completed:
         return Colors.purpleAccent;
-      case ExcursionStatus.cancelada:
+      case ExcursionStatus.canceled:
         return Colors.redAccent;
     }
   }
 
-  /// Busca uma excursão na lista em memória pelo seu ID.
   Excursion? getExcursionById(String excursionId) {
     try {
-      return _excursions.firstWhere((excursion) => excursion.id == excursionId);
+      return _excursions.firstWhere((ex) => ex.id == excursionId);
     } catch (e) {
       return null;
     }
@@ -153,7 +172,6 @@ class ExcursionProvider with ChangeNotifier {
 
   @override
   void dispose() {
-    print('[Provider] Dispose chamado. Cancelando a inscrição da stream.');
     _excursionSubscription?.cancel();
     super.dispose();
   }
