@@ -5,8 +5,6 @@ import 'package:transferr/models/excursion.dart';
 import '../models/enums.dart';
 import '../models/participant.dart';
 
-// Este Enum deve estar em um arquivo de modelo, mas pode ficar aqui temporariamente.
-
 class ExcursionProvider with ChangeNotifier {
   // --- Estado e Conexão com Firebase ---
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -19,6 +17,7 @@ class ExcursionProvider with ChangeNotifier {
   int _totalAvailableSeats = 0;
   int _totalPayments = 0;
   int _completePayments = 0;
+  int _totalSeatsOfAllExcursions =0;
 
 
   List<Excursion> _excursions = [];
@@ -40,6 +39,9 @@ class ExcursionProvider with ChangeNotifier {
   int get totalPayments => _totalPayments;
 
   int get completePayments => _completePayments;
+
+  int get totalSeatsOfAllExcursions => _totalSeatsOfAllExcursions;
+
 
   ExcursionProvider() {
     _excursionsRef = _firestore.collection('excursions');
@@ -84,6 +86,8 @@ class ExcursionProvider with ChangeNotifier {
   }
 
   void _calculoTotals() {
+
+    int tempTotalSeats = 0;
     double tempGross = 0;
     double tempNet = 0;
     int tempClients = 0;
@@ -93,6 +97,7 @@ class ExcursionProvider with ChangeNotifier {
 
     // Itera sobre a lista uma única vez para calcular tudo.
     for (final excursion in _excursions) {
+      tempTotalSeats += excursion.totalSeats;
       tempGross += excursion.grossRevenue;
       tempNet += excursion.netRevenue;
       tempClients += excursion.totalClientsConfirmed;
@@ -103,6 +108,7 @@ class ExcursionProvider with ChangeNotifier {
     }
 
     // Atualiza as variáveis de estado
+    _totalSeatsOfAllExcursions = tempTotalSeats;
     _totalGrossRevenue = tempGross;
     _totalNetRevenue = tempNet;
     _totalClientsConfirmed = tempClients;
