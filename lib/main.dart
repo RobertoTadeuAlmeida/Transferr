@@ -5,6 +5,8 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:transferr/firebase_options.dart';
+import 'package:transferr/providers/client_provider.dart';
+import 'package:transferr/screens/auth_wrapper.dart';
 import 'dart:convert';
 import 'models/excursion.dart';
 import 'models/client.dart';
@@ -31,32 +33,13 @@ final String initialAuthToken = const String.fromEnvironment(
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  final Map<String, dynamic> firebaseConfig = jsonDecode(firebaseConfigString);
-
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
-  try {
-    if (initialAuthToken.isNotEmpty) {
-      await FirebaseAuth.instance.signInWithCustomToken(initialAuthToken);
-      print(
-        'Autenticado com token personalizado: ${FirebaseAuth.instance.currentUser?.uid}',
-      );
-    } else {
-      await FirebaseAuth.instance.signInAnonymously();
-      print(
-        'Autenticado anonimamente: ${FirebaseAuth.instance.currentUser?.uid}',
-      );
-    }
-  } catch (e) {
-    print("Erro na autenticação Firebase: $e");
-  }
-
-  // Envolve o aplicativo com o ChangeNotifierProvider para o ExcursionProvider
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (context) => ExcursionProvider()),
-        // Você poderia adicionar outros providers aqui, como ClientProvider, etc.
+        ChangeNotifierProvider(create: (context) => ClientProvider()),
       ],
       child: const MyApp(),
     ),
@@ -69,20 +52,18 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'App de Gerenciamento de Excursões',
+      title: 'Transferr',
       theme: ThemeData(
         scaffoldBackgroundColor: const Color(0xFF1A1A1A),
         fontFamily: 'Inter',
         visualDensity: VisualDensity.adaptivePlatformDensity,
         appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFF1A1A1A), // AppBar transparente/escura
+          backgroundColor: Color(0xFF1A1A1A),
           foregroundColor: Colors.white,
-          elevation: 0, // Sem sombra na AppBar
-          iconTheme: IconThemeData(color: Colors.white), // Ícones brancos
+          elevation: 0,
+          iconTheme: IconThemeData(color: Colors.white),
         ),
-        drawerTheme: const DrawerThemeData(
-          backgroundColor: Color(0xFF1A1A1A), // Fundo do Drawer escuro
-        ),
+        drawerTheme: const DrawerThemeData(backgroundColor: Color(0xFF1A1A1A)),
         colorScheme: const ColorScheme.dark(
           primary: Color(0xFFF97316),
           surface: Color(0xFF1A1A1A),
@@ -107,8 +88,10 @@ class MyApp extends StatelessWidget {
         ),
         elevatedButtonTheme: ElevatedButtonThemeData(
           style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFFF97316), // Cor de fundo dos botões
-            foregroundColor: Colors.white, // Cor do texto dos botões
+            backgroundColor: const Color(0xFFF97316),
+            // Cor de fundo dos botões
+            foregroundColor: Colors.white,
+            // Cor do texto dos botões
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(
                 10.0,
@@ -134,46 +117,23 @@ class MyApp extends StatelessWidget {
       ),
       initialRoute: '/',
       routes: {
-        '/': (context) => const HomePage(),
-        // TODO: Atualizar as outras telas para usar Provider
-        '/excursion_details': (context) => ExcursionDetailsPage(
-          excursion: ModalRoute.of(context)!.settings.arguments as Excursion,
-        ),
+        '/': (context) => AuthWrapper(),
+        // Rotas adicionadas
+        '/excursion_details': (context) {
+          final String excursionId =
+              ModalRoute.of(context)!.settings.arguments as String;
+          return ExcursionDetailsPage(excursionId: excursionId);
+        },
+        //Rotas adicionadas
         '/clients': (context) => const ClientsListPage(),
-        '/client_details': (context) => ClientDetailsPage(
-          client: ModalRoute.of(context)!.settings.arguments as Client,
-        ),
+        '/client_details': (context) {
+          final String clientId =
+              ModalRoute.of(context)!.settings.arguments as String;
+          return ClientDetailsPage(clientId: clientId);
+        },
+
         '/finance': (context) => const FinancePage(),
       },
     );
-  }
-}
-
-void addExcursionToFirestore() async {
-  // Objeto de dados (semelhante a um JSON) para a nova excursão.
-  // Em Dart, usamos um Map<String, dynamic>.
-  final Map<String, dynamic> newExcursionData = {
-    'name': 'Trilha da Cachoeira',
-    'date': '2025-10-26',
-    'price': 150.00,
-    'status': 'Agendada',
-    'grossRevenue': 0.0,
-    'netRevenue': 0.0,
-    'totalClientsConfirmed': 0,
-  };
-
-  try {
-    // Obter a instância do Firestore.
-    final db = FirebaseFirestore.instance;
-
-    // Adicionar o novo documento à coleção 'excursions'.
-    // O Firestore gerará um ID único para este novo documento.
-    await db.collection('excursions').add(newExcursionData);
-
-    print(
-      'Excursão "Trilha da Cachoeira" adicionada com sucesso ao Firestore!',
-    );
-  } catch (e) {
-    print('Erro ao adicionar excursão ao Firestore: $e');
   }
 }
