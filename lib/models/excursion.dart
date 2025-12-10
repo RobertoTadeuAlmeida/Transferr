@@ -11,7 +11,9 @@ class Excursion {
   final String location;
   final String description;
   final ExcursionStatus status;
-  final List<Participant> participants; // Lista de participantes
+  final List<Participant> participants;
+  final bool isFeatured;
+
 
   Excursion({
     this.id,
@@ -23,6 +25,7 @@ class Excursion {
     this.description = '',
     ExcursionStatus? status,
     this.participants = const [],
+    this.isFeatured = false,
   }): status = status ?? ExcursionStatus.scheduled;
 
   // --- GETTERS (Campos Calculados) ---
@@ -96,6 +99,7 @@ class Excursion {
       'description': description,
       'status': status.toString().split('.').last,
       'participants': participants.map((p) => p.toMap()).toList(),
+      'isFeatured': isFeatured,
     };
   }
 
@@ -118,6 +122,7 @@ class Excursion {
       location: data['location'] ?? '',
       description: data['description'] ?? '',
       status: statusEnum,
+      isFeatured: data['isFeatured'] ?? false,
 
       participants:
           (data['participants'] as List<dynamic>?)
@@ -138,6 +143,7 @@ class Excursion {
     String? description,
     ExcursionStatus? status,
     List<Participant>? participants,
+    bool? isFeatured,
   }) {
     return Excursion(
       id: id ?? this.id,
@@ -149,6 +155,7 @@ class Excursion {
       description: description ?? this.description,
       status: status ?? this.status,
       participants: participants ?? this.participants,
+      isFeatured: isFeatured ?? this.isFeatured,
     );
   }
 }

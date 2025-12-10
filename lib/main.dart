@@ -7,6 +7,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:transferr/firebase_options.dart';
 import 'package:transferr/providers/client_provider.dart';
 import 'package:transferr/screens/auth_wrapper.dart';
+import 'package:transferr/screens/excursion_dashboard_page.dart';
 import 'dart:convert';
 import 'models/excursion.dart';
 import 'models/client.dart';
@@ -118,13 +119,11 @@ class MyApp extends StatelessWidget {
       initialRoute: '/',
       routes: {
         '/': (context) => AuthWrapper(),
-        // Rotas adicionadas
         '/excursion_details': (context) {
           final String excursionId =
               ModalRoute.of(context)!.settings.arguments as String;
-          return ExcursionDetailsPage(excursionId: excursionId);
+          return ExcursionDashboardPage(excursionId: excursionId);
         },
-        //Rotas adicionadas
         '/clients': (context) => const ClientsListPage(),
         '/client_details': (context) {
           final String clientId =

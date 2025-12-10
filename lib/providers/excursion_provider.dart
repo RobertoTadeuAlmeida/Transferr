@@ -17,14 +17,22 @@ class ExcursionProvider with ChangeNotifier {
   int _totalAvailableSeats = 0;
   int _totalPayments = 0;
   int _completePayments = 0;
-  int _totalSeatsOfAllExcursions =0;
+  int _totalSeatsOfAllExcursions = 0;
 
-
+  List<Excursion> _activeExcursions = [];
+  List<Excursion> _historicalExcursions = [];
   List<Excursion> _excursions = [];
   bool _isLoading = true;
 
   // --- Getters Públicos ---
   List<Excursion> get excursions => _excursions;
+
+  List<Excursion> get activeExcursions => _activeExcursions;
+
+  List<Excursion> get historicalExcursions => _historicalExcursions;
+
+  List<Excursion> get featuredExcursions =>
+      _excursions.where((ex) => ex.isFeatured).toList();
 
   bool get isLoading => _isLoading;
 
@@ -42,13 +50,11 @@ class ExcursionProvider with ChangeNotifier {
 
   int get totalSeatsOfAllExcursions => _totalSeatsOfAllExcursions;
 
-
   ExcursionProvider() {
     _excursionsRef = _firestore.collection('excursions');
     listenToExcursions();
   }
 
-  // --- Lógica de "Ouvinte" em Tempo Real ---
   void listenToExcursions() {
     _isLoading = true;
     notifyListeners();
@@ -60,33 +66,48 @@ class ExcursionProvider with ChangeNotifier {
         .snapshots() // A mágica do tempo real!
         .listen(
           (QuerySnapshot snapshot) {
-        _excursions = snapshot.docs.map((doc) {
-          // O cast para DocumentSnapshot é importante
-          return Excursion.fromFirestore(
-              doc as DocumentSnapshot<Map<String, dynamic>>);
-        }).toList();
+            _excursions = snapshot.docs.map((doc) {
+              return Excursion.fromFirestore(
+                doc as DocumentSnapshot<Map<String, dynamic>>,
+              );
+            }).toList();
 
-        _calculoTotals();
+            _activeExcursions = _excursions
+                .where((ex) => ex.status == ExcursionStatus.scheduled)
+                .toList();
 
-        // Só muda o estado de loading na primeira carga bem-sucedida
-        if (_isLoading) {
-          _isLoading = false;
-        }
-        notifyListeners(); // Notifica a UI sobre os novos dados
-      },
-      onError: (error) {
-        print("====== ERRO NO STREAM DO FIREBASE ======");
-        print("Erro ao ouvir excursões: $error");
-        print(
-            "Verifique as Regras de Segurança do Firestore no console do Firebase!");
-        _isLoading = false;
-        notifyListeners();
-      },
-    );
+            _historicalExcursions = _excursions
+                .where(
+                  (ex) =>
+                      ex.status == ExcursionStatus.completed ||
+                      ex.status == ExcursionStatus.canceled,
+                )
+                .toList();
+
+            // --- FIM DA CORREÇÃO ---
+
+            // Passo 4: Executa os cálculos de totais (que já estavam corretos).
+            _calculoTotals();
+
+            // Passo 5: Atualiza o estado de loading e notifica a UI.
+            if (_isLoading) {
+              _isLoading = false;
+            }
+            notifyListeners(); // Notifica a UI sobre os novos dados e as novas listas.
+          },
+          onError: (error) {
+            print("====== ERRO NO STREAM DO FIREBASE ======");
+            print("Erro ao ouvir excursões: $error");
+            print(
+              "Verifique as Regras de Segurança do Firestore no console do Firebase!",
+            );
+            _isLoading = false;
+            notifyListeners();
+          },
+        );
   }
 
   void _calculoTotals() {
-
     int tempTotalSeats = 0;
     double tempGross = 0;
     double tempNet = 0;
@@ -133,24 +154,108 @@ class ExcursionProvider with ChangeNotifier {
       throw Exception('ID da excursão não pode ser nulo para atualização.');
     }
     try {
-      await _excursionsRef.doc(updatedExcursion.id).update(
-          updatedExcursion.toMap());
+      await _excursionsRef
+          .doc(updatedExcursion.id)
+          .update(updatedExcursion.toMap());
     } catch (e) {
       print('Erro ao atualizar excursão: $e');
       throw e;
     }
   }
 
-  // 3. CORRIGIDO: Agora aceita uma String, que é mais simples
-  Future<void> deleteExcursion(String excursionId) async {
+  Future<void> updateExcursionStatus(
+    String excursionId,
+    ExcursionStatus newStatus,
+  ) async {
     try {
-      await _excursionsRef.doc(excursionId).delete();
-    } catch (e) {
-      print('Erro ao deletar excursão: $e');
-      throw e;
+      final Map<String, dynamic> updateData = {
+        'status': newStatus.name,
+        // Se o novo status for 'completed' ou 'canceled', definimos 'isFeatured' como false.
+        if (newStatus == ExcursionStatus.completed ||
+            newStatus == ExcursionStatus.canceled)
+          'isFeatured': false,
+      };
+
+      await _firestore
+          .collection('excursions')
+          .doc(excursionId)
+          .update(updateData);
+
+      print(
+        'Excursão $excursionId atualizada para o status: ${newStatus.name} e destaque removido.',
+      );
+    } catch (error) {
+      print("Erro ao atualizar o status da excursão: $error");
+      rethrow;
     }
   }
 
+  Future<void> deleteExcursion(String excursionId) async {
+    try {
+      await _firestore.collection('excursions').doc(excursionId).delete();
+      print('Excursão $excursionId excluída com sucesso.');
+    } catch (error) {
+      print("Erro ao excluir excursão: $error");
+      rethrow; // Lança o erro para que a UI possa tratá-lo se necessário.
+    }
+  }
+
+  Future<void> deleteMultipleExcursions(List<String> excursionIds) async {
+    if (excursionIds.isEmpty) return;
+
+    try {
+      final batch = _firestore.batch();
+      for (final id in excursionIds) {
+        batch.delete(_firestore.collection('excursions').doc(id));
+      }
+      await batch.commit();
+      print('${excursionIds.length} excursões foram excluídas em lote.');
+    } catch (error) {
+      print("Erro ao excluir excursões em lote: $error");
+      rethrow;
+    }
+  }
+
+
+  Future<void> clearHistory() async {
+    try {
+      final historicalQuery = _firestore
+          .collection('excursions')
+          .where(
+            'status',
+            whereIn: [
+              ExcursionStatus.completed.name,
+              ExcursionStatus.canceled.name,
+            ],
+          );
+
+      final snapshot = await historicalQuery.get();
+
+      final batch = _firestore.batch();
+      for (var doc in snapshot.docs) {
+        batch.delete(doc.reference);
+      }
+      await batch.commit();
+      print('${snapshot.docs.length} excursões do histórico foram excluídas.');
+    } catch (error) {
+      print("Erro ao limpar o histórico: $error");
+      rethrow;
+    }
+  }
+
+  Future<void> toggleFeaturedStatus(
+    String excursionId,
+    bool currentStatus,
+  ) async {
+    try {
+      await _firestore.collection('excursions').doc(excursionId).update({
+        'isFeatured': !currentStatus,
+      });
+    } catch (error) {
+      print("Erro ao atualizar o status de destaque: $error");
+      rethrow; // Lança o erro para que a UI possa, opcionalmente, mostrá-lo.
+    }
+  }
 
   // --- Métodos Utilitários ---
 
@@ -171,6 +276,14 @@ class ExcursionProvider with ChangeNotifier {
   Excursion? getExcursionById(String excursionId) {
     try {
       return _excursions.firstWhere((ex) => ex.id == excursionId);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  Excursion? getExcursionByName(String id) {
+    try {
+      return _excursions.firstWhere((ex) => ex.id == id);
     } catch (e) {
       return null;
     }

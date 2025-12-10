@@ -1,5 +1,3 @@
-// lib/screens/excursions/excursion_details_page.dart
-
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart'; // NECESSÁRIO para formatar datas e moedas
 import 'package:provider/provider.dart';
