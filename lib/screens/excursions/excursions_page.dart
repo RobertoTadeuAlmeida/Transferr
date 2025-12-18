@@ -2,10 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:transferr/providers/excursion_provider.dart';
 import 'package:transferr/screens/excursions/add_edit_excursion_page.dart';
+import 'package:transferr/widgets/app_drawer.dart';
 import 'package:transferr/widgets/excursion_card.dart';
 
 import 'excursion_dashboard_page.dart';
-import 'excursions/history_page.dart';
+import 'history_page.dart';
 
 class ExcursionsPage extends StatefulWidget {
   const ExcursionsPage({super.key});
@@ -56,6 +57,7 @@ class _ExcursionsPageState extends State<ExcursionsPage> {
     final activeExcursions = excursionProvider.activeExcursions;
 
     return Scaffold(
+      drawer: AppDrawer(),
       appBar: AppBar(
         leading: _isSelectionMode
             ? IconButton(

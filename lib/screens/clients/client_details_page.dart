@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../providers/client_provider.dart';
-import '../providers/excursion_provider.dart';
+import '../../providers/client_provider.dart';
+import '../../providers/excursion_provider.dart';
+import 'add_edit_client_page.dart';
 
 class ClientDetailsPage extends StatelessWidget {
   final String clientId;
@@ -59,7 +60,8 @@ class ClientDetailsPage extends StatelessWidget {
             Card(
               elevation: 4,
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16.0)),
+                borderRadius: BorderRadius.circular(16.0),
+              ),
               color: Theme.of(context).cardColor,
               child: Padding(
                 padding: const EdgeInsets.all(20.0),
@@ -69,16 +71,19 @@ class ClientDetailsPage extends StatelessWidget {
                     const Text(
                       'Informações do Cliente',
                       style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white),
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
                     ),
                     const SizedBox(height: 16),
                     _buildDetailRow('Nome:', client.name),
                     _buildDetailRow('Contato:', client.contact),
                     _buildDetailRow('CPF:', client.cpf),
-                    _buildDetailRow('Data de Nascimento:',
-                        '${client.birthDate.day}/${client.birthDate.month}/${client.birthDate.year}'),
+                    _buildDetailRow(
+                      'Data de Nascimento:',
+                      '${client.birthDate.day}/${client.birthDate.month}/${client.birthDate.year}',
+                    ),
                   ],
                 ),
               ),
@@ -87,7 +92,8 @@ class ClientDetailsPage extends StatelessWidget {
             Card(
               elevation: 4,
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16.0)),
+                borderRadius: BorderRadius.circular(16.0),
+              ),
               color: Theme.of(context).cardColor,
               child: Padding(
                 padding: const EdgeInsets.all(20.0),
@@ -97,16 +103,19 @@ class ClientDetailsPage extends StatelessWidget {
                     const Text(
                       'Excursões do Cliente',
                       style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white),
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
                     ),
                     const SizedBox(height: 10),
                     // 5. [MELHORIA] Usa o ExcursionProvider para mostrar o nome real das excursões.
                     if (client.confirmedExcursionIds.isEmpty &&
                         client.pendingExcursionIds.isEmpty)
-                      const Text('Nenhuma excursão associada a este cliente.',
-                          style: TextStyle(color: Colors.white70)),
+                      const Text(
+                        'Nenhuma excursão associada a este cliente.',
+                        style: TextStyle(color: Colors.white70),
+                      ),
                     if (client.confirmedExcursionIds.isNotEmpty)
                       _buildExcursionList(
                         'Confirmadas:',
@@ -129,11 +138,11 @@ class ClientDetailsPage extends StatelessWidget {
             Center(
               child: ElevatedButton.icon(
                 onPressed: () {
-                  // TODO: Implementar edição do cliente
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                        content:
-                        Text('Funcionalidade de edição de cliente em breve!')),
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => AddEditClientPage(client: client),
+                    ),
                   );
                 },
                 icon: const Icon(Icons.edit),
@@ -156,7 +165,10 @@ class ClientDetailsPage extends StatelessWidget {
           Text(
             label,
             style: const TextStyle(
-                fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
           ),
           const SizedBox(width: 8),
           Expanded(
@@ -171,8 +183,12 @@ class ClientDetailsPage extends StatelessWidget {
   }
 
   // 6. [MUDANÇA] O método agora recebe o ExcursionProvider para buscar os nomes.
-  Widget _buildExcursionList(String title, List<String> excursionIds,
-      Color color, ExcursionProvider excursionProvider) {
+  Widget _buildExcursionList(
+    String title,
+    List<String> excursionIds,
+    Color color,
+    ExcursionProvider excursionProvider,
+  ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -180,13 +196,18 @@ class ClientDetailsPage extends StatelessWidget {
           padding: const EdgeInsets.symmetric(vertical: 8.0),
           child: Text(
             title,
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: color),
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
           ),
         ),
         ...excursionIds.map((id) {
           // Busca o nome da excursão usando o ID.
           final excursionName =
-              excursionProvider.getExcursionById(id)?.name ?? 'Excursão não encontrada';
+              excursionProvider.getExcursionById(id)?.name ??
+              'Excursão não encontrada';
           return Padding(
             padding: const EdgeInsets.symmetric(vertical: 4.0, horizontal: 8.0),
             child: Row(

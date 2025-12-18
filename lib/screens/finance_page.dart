@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:transferr/widgets/app_drawer.dart';
 
 import '../main.dart';
 import '../models/excursion.dart';
@@ -66,6 +67,7 @@ class _FinancePageState extends State<FinancePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      drawer: AppDrawer(),
       appBar: AppBar(
         title: const Text('Administração Financeira'),
         backgroundColor: Theme.of(context).scaffoldBackgroundColor, // Cor de fundo escura

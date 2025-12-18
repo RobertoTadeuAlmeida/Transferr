@@ -3,10 +3,9 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../models/excursion.dart';
 import '../providers/excursion_provider.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:transferr/screens/excursions_page.dart';
-import 'package:transferr/screens/clients_list_page.dart';
-import 'package:transferr/screens/finance_page.dart';
+
+// 1. IMPORTE O NOVO WIDGET DO DRAWER
+import '../widgets/app_drawer.dart';
 
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
@@ -14,27 +13,23 @@ class HomePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final excursionProvider = context.watch<ExcursionProvider>();
-    // Usa o getter para obter apenas as excursões em destaque
     final List<Excursion> featuredExcursions = excursionProvider.featuredExcursions;
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Destaques'),
-        leading: Builder(
-          builder: (context) => IconButton(
-            icon: const Icon(Icons.menu),
-            onPressed: () => Scaffold.of(context).openDrawer(),
-          ),
-        ),
+        // Não precisa mais do `leading`, pois o Scaffold adiciona
+        // o botão de menu automaticamente quando um Drawer está presente.
       ),
-      // O Drawer agora chama o método que contém a versão completa
-      drawer: _buildAppDrawer(context),
+      // 2. USE O WIDGET REUTILIZÁVEL AQUI
+      drawer: const AppDrawer(),
       body: excursionProvider.isLoading
           ? const Center(child: CircularProgressIndicator(color: Color(0xFFF97316)))
           : _buildFeaturedList(context, featuredExcursions),
       floatingActionButton: FloatingActionButton(
         onPressed: () {
-          Navigator.push(context, MaterialPageRoute(builder: (context) => const ExcursionsPage()));
+          // É melhor usar a navegação por rota nomeada que já temos
+          Navigator.pushNamed(context, '/excursions');
         },
         backgroundColor: const Color(0xFFF97316),
         foregroundColor: Colors.white,
@@ -97,85 +92,5 @@ class HomePage extends StatelessWidget {
     );
   }
 
-  /// Constrói o menu lateral (Drawer) COMPLETO da aplicação.
-  Drawer _buildAppDrawer(BuildContext context) {
-    final currentUser = FirebaseAuth.instance.currentUser;
-
-    return Drawer(
-      child: ListView(
-        padding: EdgeInsets.zero,
-        children: <Widget>[
-          DrawerHeader(
-            decoration: const BoxDecoration(color: Color(0xFFF97316)),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                Text(
-                  currentUser?.displayName ?? currentUser?.email?.split('@').first ?? 'Usuário',
-                  style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  currentUser?.email ?? 'Não autenticado',
-                  style: const TextStyle(color: Colors.white70, fontSize: 14),
-                ),
-              ],
-            ),
-          ),
-          // --- Itens do Menu ---
-          ListTile(
-            leading: const Icon(Icons.star, color: Colors.white),
-            title: const Text('Destaques', style: TextStyle(color: Colors.white)),
-            onTap: () => Navigator.pop(context), // Ação: apenas fecha o drawer.
-          ),
-          ListTile(
-            leading: const Icon(Icons.tour, color: Colors.white),
-            title: const Text('Todas as Excursões', style: TextStyle(color: Colors.white)),
-            onTap: () {
-              Navigator.pop(context);
-              Navigator.push(context, MaterialPageRoute(builder: (context) => const ExcursionsPage()));
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.people, color: Colors.white),
-            title: const Text('Clientes', style: TextStyle(color: Colors.white)),
-            onTap: () {
-              Navigator.pop(context);
-              Navigator.push(context, MaterialPageRoute(builder: (context) => const ClientsListPage()));
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.monetization_on, color: Colors.white),
-            title: const Text('Finanças', style: TextStyle(color: Colors.white)),
-            onTap: () {
-              Navigator.pop(context);
-              Navigator.push(context, MaterialPageRoute(builder: (context) => const FinancePage()));
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.settings, color: Colors.white),
-            title: const Text('Configurações', style: TextStyle(color: Colors.white)),
-            onTap: () {
-              Navigator.pop(context);
-              // TODO: Criar e navegar para a tela de Configurações
-              // Ex: Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsPage()));
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Tela de Configurações a ser implementada!')),
-              );
-            },
-          ),
-          const Divider(color: Colors.white38),
-          ListTile(
-            leading: const Icon(Icons.logout, color: Colors.redAccent),
-            title: const Text('Sair', style: TextStyle(color: Colors.white)),
-            onTap: () async {
-              await FirebaseAuth.instance.signOut();
-              // Não precisa de navegação aqui se você tiver um AuthWrapper.
-            },
-          ),
-        ],
-      ),
-    );
-  }
+// 3. O MÉTODO _buildAppDrawer FOI COMPLETAMENTE REMOVIDO DAQUI
 }

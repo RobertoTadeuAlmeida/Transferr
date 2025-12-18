@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import '../models/enums.dart';
-import '../models/excursion.dart';
-import '../providers/client_provider.dart';
-import '../providers/excursion_provider.dart';
-import 'excursions/add_edit_excursion_page.dart';
+import '../../models/enums.dart';
+import '../../models/excursion.dart';
+import '../../providers/client_provider.dart';
+import '../../providers/excursion_provider.dart';
+import 'add_edit_excursion_page.dart';
 
 class ExcursionDashboardPage extends StatelessWidget {
   final String excursionId;
@@ -14,17 +14,23 @@ class ExcursionDashboardPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final provider = context.read<ExcursionProvider>();
     final Excursion? excursion = context.select<ExcursionProvider, Excursion?>(
           (p) => p.getExcursionById(excursionId),
     );
 
     if (excursion == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        // Garante que o pop só acontece depois que o build termina.
+        if (Navigator.canPop(context)) {
+          Navigator.of(context).pop();
+        }
+      });
       return Scaffold(
-        appBar: AppBar(title: const Text('Excursão não encontrada')),
-        body: const Center(
-          child: Text('A excursão pode ter sido removida.'),
+        appBar: AppBar(
+          title: const Text('Erro'),
+          centerTitle: true,
         ),
+        body: const Center(child: Text('Carregando excursão ou ela foi removida...')),
       );
     }
 
@@ -43,7 +49,7 @@ class ExcursionDashboardPage extends StatelessWidget {
         actions: [
           PopupMenuButton<String>(
             onSelected: (value) {
-              _handleMenuSelection(context, value, excursion, provider);
+              _handleMenuSelection(context, value, excursion);
             },
             itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
               const PopupMenuItem<String>(
@@ -53,7 +59,7 @@ class ExcursionDashboardPage extends StatelessWidget {
               const PopupMenuDivider(),
               PopupMenuItem<String>(
                 value: 'concluir',
-                enabled: excursion.status == ExcursionStatus.scheduled,
+                enabled: excursion.status == ExcursionStatus.agendada,
                 child: const ListTile(
                   leading: Icon(Icons.check_circle, color: Colors.green),
                   title: Text('Concluir Excursão'),
@@ -61,7 +67,7 @@ class ExcursionDashboardPage extends StatelessWidget {
               ),
               PopupMenuItem<String>(
                 value: 'cancelar',
-                enabled: excursion.status == ExcursionStatus.scheduled,
+                enabled: excursion.status == ExcursionStatus.agendada,
                 child: const ListTile(
                   leading: Icon(Icons.cancel, color: Colors.red),
                   title: Text('Cancelar Excursão'),
@@ -163,7 +169,8 @@ class ExcursionDashboardPage extends StatelessWidget {
 
   // ... (O restante dos seus métodos estáticos permanece o mesmo)
 
-  static void _handleMenuSelection(BuildContext context, String value, Excursion excursion, ExcursionProvider provider) {
+  static void _handleMenuSelection(BuildContext context, String value, Excursion excursion) {
+    final provider = context.read<ExcursionProvider>();
     switch (value) {
       case 'editar':
         Navigator.push(
@@ -178,7 +185,7 @@ class ExcursionDashboardPage extends StatelessWidget {
           content: 'Esta ação marcará a excursão como "concluída". Você confirma?',
           onConfirm: () {
             Navigator.of(context).pop();
-            provider.updateExcursionStatus(excursion.id!, ExcursionStatus.completed);
+            provider.updateExcursionStatus(excursion.id!, ExcursionStatus.realizada);
             Navigator.of(context).pop();
           },
         );
@@ -190,7 +197,7 @@ class ExcursionDashboardPage extends StatelessWidget {
           content: 'Esta ação é irreversível e marcará a excursão como "cancelada".',
           onConfirm: () {
             Navigator.of(context).pop();
-            provider.updateExcursionStatus(excursion.id!, ExcursionStatus.canceled);
+            provider.updateExcursionStatus(excursion.id!, ExcursionStatus.cancelada);
             Navigator.of(context).pop();
           },
         );
@@ -229,10 +236,10 @@ class ExcursionDashboardPage extends StatelessWidget {
   static Widget _buildInfoCard(Excursion excursion) {
     final status = excursion.status;
     final statusColor = switch (status) {
-      ExcursionStatus.scheduled => Colors.cyan,
-      ExcursionStatus.completed => Colors.green,
-      ExcursionStatus.canceled => Colors.red,
-      ExcursionStatus.confirmed => Colors.blue,
+      ExcursionStatus.agendada => Colors.cyan,
+      ExcursionStatus.realizada => Colors.green,
+      ExcursionStatus.cancelada => Colors.red,
+      ExcursionStatus.confirmada => Colors.blue,
     };
 
     return Card(

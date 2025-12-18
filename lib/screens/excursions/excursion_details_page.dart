@@ -198,6 +198,7 @@ class ExcursionDetailsPage extends StatelessWidget {
           ],
         ),
       ),
+
     );
   }
 }

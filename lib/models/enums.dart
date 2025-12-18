@@ -1,9 +1,9 @@
 /// Represents the possible states of an excursion.
 enum ExcursionStatus {
-  scheduled, // agendada
-  confirmed, // confirmada
-  completed, // realizada
-  canceled,  // cancelada
+  agendada, // agendada
+  confirmada, // confirmada
+  realizada, // realizada
+  cancelada,  // cancelada
 }
 
 /// Represents the possible payment states of a participant.

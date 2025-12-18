@@ -8,6 +8,7 @@ class Client {
   final DateTime birthDate;
   final List<String> confirmedExcursionIds;
   final List<String> pendingExcursionIds;
+  final bool isActive;
 
   Client({
     required this.id,
@@ -17,6 +18,7 @@ class Client {
     required this.birthDate,
     this.confirmedExcursionIds = const [],
     this.pendingExcursionIds = const [],
+    this.isActive = false,
   });
 
   // Converte o objeto Client em um formato que o Firestore entende.
@@ -31,16 +33,48 @@ class Client {
     };
   }
 
-  factory Client.fromFirestore(DocumentSnapshot doc) {
-    Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
+  factory Client.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
+    final data = doc.data();
+
+    // Validação para garantir que os dados do Firestore não estão corrompidos/incompletos.
+    if (data == null ||
+        data['name'] == null ||
+        data['contact'] == null ||
+        data['cpf'] == null ||
+        data['birthDate'] == null) {
+      // Lança um erro claro. Isso ajuda a identificar problemas no seu banco de dados.
+      throw StateError(
+        'Dados do cliente ${doc.id} estão incompletos ou corrompidos no Firestore!',
+      );
+    }
     return Client(
       id: doc.id,
       name: data['name'] ?? '',
       contact: data['contact'] ?? '',
       cpf: data['cpf'] ?? '',
       birthDate: (data['birthDate'] as Timestamp? ?? Timestamp.now()).toDate(),
-      confirmedExcursionIds: List<String>.from(data['confirmedExcursionIds'] ?? []),
+      confirmedExcursionIds: List<String>.from(
+        data['confirmedExcursionIds'] ?? [],
+      ),
       pendingExcursionIds: List<String>.from(data['pendingExcursionIds'] ?? []),
+    );
+  }
+
+  Client copyWith({
+    String? id,
+    String? name,
+    String? contact,
+    String? cpf,
+    DateTime? birthDate,
+    bool? isActive,
+  }) {
+    return Client(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      contact: contact ?? this.contact,
+      cpf: cpf ?? this.cpf,
+      birthDate: birthDate ?? this.birthDate,
+      isActive: isActive ?? this.isActive,
     );
   }
 }

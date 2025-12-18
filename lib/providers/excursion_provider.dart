@@ -73,14 +73,14 @@ class ExcursionProvider with ChangeNotifier {
             }).toList();
 
             _activeExcursions = _excursions
-                .where((ex) => ex.status == ExcursionStatus.scheduled)
+                .where((ex) => ex.status == ExcursionStatus.agendada)
                 .toList();
 
             _historicalExcursions = _excursions
                 .where(
                   (ex) =>
-                      ex.status == ExcursionStatus.completed ||
-                      ex.status == ExcursionStatus.canceled,
+                      ex.status == ExcursionStatus.confirmada ||
+                      ex.status == ExcursionStatus.cancelada,
                 )
                 .toList();
 
@@ -171,8 +171,8 @@ class ExcursionProvider with ChangeNotifier {
       final Map<String, dynamic> updateData = {
         'status': newStatus.name,
         // Se o novo status for 'completed' ou 'canceled', definimos 'isFeatured' como false.
-        if (newStatus == ExcursionStatus.completed ||
-            newStatus == ExcursionStatus.canceled)
+        if (newStatus == ExcursionStatus.realizada ||
+            newStatus == ExcursionStatus.cancelada)
           'isFeatured': false,
       };
 
@@ -224,8 +224,8 @@ class ExcursionProvider with ChangeNotifier {
           .where(
             'status',
             whereIn: [
-              ExcursionStatus.completed.name,
-              ExcursionStatus.canceled.name,
+              ExcursionStatus.realizada.name,
+              ExcursionStatus.realizada.name,
             ],
           );
 
@@ -262,13 +262,13 @@ class ExcursionProvider with ChangeNotifier {
   Color getStatusColor(ExcursionStatus status) {
     // Seu switch de cores está perfeito
     switch (status) {
-      case ExcursionStatus.scheduled:
+      case ExcursionStatus.agendada:
         return Colors.blueAccent;
-      case ExcursionStatus.confirmed:
+      case ExcursionStatus.confirmada:
         return Colors.greenAccent;
-      case ExcursionStatus.completed:
+      case ExcursionStatus.realizada:
         return Colors.purpleAccent;
-      case ExcursionStatus.canceled:
+      case ExcursionStatus.cancelada:
         return Colors.redAccent;
     }
   }

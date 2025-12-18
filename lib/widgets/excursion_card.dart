@@ -4,7 +4,7 @@ import 'package:provider/provider.dart';
 import '../models/excursion.dart';
 import '../models/enums.dart';
 import '../providers/excursion_provider.dart';
-import '../screens/excursion_dashboard_page.dart';
+import '../screens/excursions/excursion_dashboard_page.dart';
 
 class ExcursionCard extends StatelessWidget {
   final Excursion excursion;
@@ -25,10 +25,10 @@ class ExcursionCard extends StatelessWidget {
     // Lógica para definir a cor do Chip de Status
     final status = excursion.status;
     final statusColor = switch (status) {
-      ExcursionStatus.scheduled => Colors.blue,
-      ExcursionStatus.completed => Colors.green,
-      ExcursionStatus.canceled => Colors.red,
-      ExcursionStatus.confirmed => Colors.blue,
+      ExcursionStatus.agendada => Colors.blue,
+      ExcursionStatus.realizada => Colors.green,
+      ExcursionStatus.cancelada => Colors.red,
+      ExcursionStatus.confirmada => Colors.blue,
     };
 
     // O conteúdo do card que será reutilizado

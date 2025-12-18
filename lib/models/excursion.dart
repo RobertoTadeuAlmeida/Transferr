@@ -26,7 +26,7 @@ class Excursion {
     ExcursionStatus? status,
     this.participants = const [],
     this.isFeatured = false,
-  }): status = status ?? ExcursionStatus.scheduled;
+  }): status = status ?? ExcursionStatus.agendada;
 
   // --- GETTERS (Campos Calculados) ---
 
@@ -110,7 +110,7 @@ class Excursion {
 
     ExcursionStatus statusEnum = ExcursionStatus.values.firstWhere(
       (e) => e.name == statusString,
-      orElse: () => ExcursionStatus.scheduled,
+      orElse: () => ExcursionStatus.agendada,
     );
 
     return Excursion(

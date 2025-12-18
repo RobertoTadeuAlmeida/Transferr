@@ -1,21 +1,16 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:transferr/firebase_options.dart';
 import 'package:transferr/providers/client_provider.dart';
+import 'package:transferr/screens/clients/add_edit_client_page.dart';
 import 'package:transferr/screens/auth_wrapper.dart';
-import 'package:transferr/screens/excursion_dashboard_page.dart';
-import 'dart:convert';
-import 'models/excursion.dart';
-import 'models/client.dart';
+import 'package:transferr/screens/clients/clients_list_page.dart';
+import 'package:transferr/screens/excursions/excursion_dashboard_page.dart';
+import 'package:transferr/screens/excursions/excursions_page.dart';
+import 'package:transferr/screens/settings_page.dart';
 import 'providers/excursion_provider.dart';
-import 'screens/home_page.dart';
-import 'screens/excursions/excursion_details_page.dart';
-import 'screens/clients_list_page.dart';
-import 'screens/client_details_page.dart';
+import 'screens/clients/client_details_page.dart';
 import 'screens/finance_page.dart';
 
 final String appId = const String.fromEnvironment(
@@ -40,7 +35,12 @@ void main() async {
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (context) => ExcursionProvider()),
-        ChangeNotifierProvider(create: (context) => ClientProvider()),
+        // 2. USE ChangeNotifierProxyProvider para o ClientProvider
+        ChangeNotifierProxyProvider<ExcursionProvider, ClientProvider>(
+          create: (context) => ClientProvider(),
+          update: (context, excursionProvider, previousClientProvider) =>
+              ClientProvider(excursionProvider: excursionProvider),
+        ),
       ],
       child: const MyApp(),
     ),
@@ -119,17 +119,20 @@ class MyApp extends StatelessWidget {
       initialRoute: '/',
       routes: {
         '/': (context) => AuthWrapper(),
+        '/excursions': (context) => const ExcursionsPage(),
         '/excursion_details': (context) {
           final String excursionId =
               ModalRoute.of(context)!.settings.arguments as String;
           return ExcursionDashboardPage(excursionId: excursionId);
         },
         '/clients': (context) => const ClientsListPage(),
+        '/add_edit_client': (context) => const AddEditClientPage(),
         '/client_details': (context) {
           final String clientId =
               ModalRoute.of(context)!.settings.arguments as String;
           return ClientDetailsPage(clientId: clientId);
         },
+        '/settings': (context) => const SettingsPage(),
 
         '/finance': (context) => const FinancePage(),
       },
