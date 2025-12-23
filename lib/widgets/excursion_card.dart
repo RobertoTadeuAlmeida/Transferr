@@ -71,7 +71,7 @@ class ExcursionCard extends StatelessWidget {
                   Icon(Icons.people_outline, size: 16, color: Colors.grey[400]),
                   const SizedBox(width: 8),
                   Text(
-                    '${excursion.totalClientsConfirmed} de ${excursion.totalSeats} vagas preenchidas',
+                    '${excursion.participants.length} de ${excursion.totalSeats} vagas preenchidas',
                     style: TextStyle(fontSize: 14, color: Colors.grey[400]),
                   ),
                 ],

@@ -8,12 +8,12 @@ class Excursion {
   final DateTime date;
   final double price;
   final int totalSeats;
+  final double pricePerPerson;
   final String location;
   final String description;
   final ExcursionStatus status;
   final List<Participant> participants;
   final bool isFeatured;
-
 
   Excursion({
     this.id,
@@ -21,60 +21,68 @@ class Excursion {
     required this.date,
     required this.price,
     required this.totalSeats,
+    required this.pricePerPerson,
     required this.location,
     this.description = '',
     ExcursionStatus? status,
     this.participants = const [],
     this.isFeatured = false,
-  }): status = status ?? ExcursionStatus.agendada;
+  }) : status = status ?? ExcursionStatus.agendada;
 
   // --- GETTERS (Campos Calculados) ---
 
-  int get totalClientsConfirmed {
-    return participants
-        .where((p) => p.status == ParticipantStatus.confirmed)
-        .length;
+  // --- GETTERS (Campos Calculados) ---
+
+  // ----------- GETTERS DE PARTICIPANTES -----------
+
+  /// Retorna a contagem de participantes com o status 'free' (Cortesia).
+  int get totalFreeParticipants =>
+      participants.where((p) => p.paymentStatus == PaymentStatus.free).length;
+
+  /// Retorna a contagem de participantes com o status 'pending'.
+  int get totalPendingParticipants => participants
+      .where((p) => p.paymentStatus == PaymentStatus.pending)
+      .length;
+
+  /// Retorna a contagem de participantes que efetivamente pagaram algo (valor > 0).
+  int get totalPayingParticipants =>
+      participants.where((p) => p.amountPaid > 0).length;
+
+  /// Retorna a contagem de participantes com pagamento totalmente concluído.
+  int get totalPaidParticipants =>
+      participants.where((p) => p.paymentStatus == PaymentStatus.paid).length;
+
+  // ----------- GETTERS FINANCEIROS -----------
+
+  /// Retorna o faturamento ESPERADO dos participantes atuais (desconsiderando os de cortesia).
+  /// Útil para saber quanto você DEVERIA receber dos participantes já inscritos.
+  double get expectedRevenueFromConfirmed {
+    return totalSeats * pricePerPerson;
   }
 
-  int get availableSeats {
-    return totalSeats - totalClientsConfirmed;
-  }
-
+  /// Retorna a renda bruta REAL, somando o que todos os participantes efetivamente pagaram.
   double get grossRevenue {
-    return totalClientsConfirmed * price;
+    if (participants.isEmpty) return 0.0;
+    return participants.fold(0.0, (sum, p) => sum + p.amountPaid);
   }
 
+  /// Retorna a renda líquida. Por enquanto, é igual à bruta, mas está pronto para futura implementação de custos.
   double get netRevenue {
-    // Exemplo: return grossRevenue - (custosDaExcursao ?? 0.0);
+    // TODO: Implementar a lógica de custos. Ex: return grossRevenue - custos;
     return grossRevenue;
   }
 
-  int get totalPaymentsMade {
-    // Total de pagamentos confirmados
-    return participants
-        .where((p) => p.paymentStatus == PaymentStatus.paid)
-        .length;
-  }
+  // ----------- GETTERS DE STATUS E CAPACIDADE -----------
 
-  int get pendingPayments {
-    return participants
-        .where(
-          (p) =>
-              p.status == ParticipantStatus.confirmed &&
-              p.paymentStatus == PaymentStatus.pending,
-        )
-        .length;
-  }
+  /// Retorna o número de assentos ainda disponíveis.
+  int get availableSeats => totalSeats - participants.length;
 
-  bool get isFull {
-    return availableSeats <= 0;
-  }
+  /// Retorna `true` se todos os assentos estiverem ocupados.
+  bool get isFull => availableSeats <= 0;
 
-  bool get hasPassed {
-    return date.isBefore(
-      DateTime.now().subtract(const Duration(days: 1)),
-    ); // Considera que passou no dia seguinte
-  }
+  /// Retorna `true` se a data da excursão já passou.
+  bool get hasPassed =>
+      date.isBefore(DateTime.now().subtract(const Duration(days: 1)));
 
   // Método para adicionar um participante
 
@@ -95,6 +103,7 @@ class Excursion {
       'date': Timestamp.fromDate(date),
       'price': price,
       'totalSeats': totalSeats,
+      'pricePerPerson': pricePerPerson,
       'location': location,
       'description': description,
       'status': status.toString().split('.').last,
@@ -119,6 +128,7 @@ class Excursion {
       date: (data['date'] as Timestamp).toDate(),
       price: (data['price'] as num?)?.toDouble() ?? 0.0,
       totalSeats: data['totalSeats'] as int? ?? 0,
+      pricePerPerson: (data['pricePerPerson'] as num?)?.toDouble() ?? 0.0,
       location: data['location'] ?? '',
       description: data['description'] ?? '',
       status: statusEnum,
@@ -139,6 +149,7 @@ class Excursion {
     DateTime? date,
     double? price,
     int? totalSeats,
+    double? pricePerPerson,
     String? location,
     String? description,
     ExcursionStatus? status,
@@ -151,6 +162,7 @@ class Excursion {
       date: date ?? this.date,
       price: price ?? this.price,
       totalSeats: totalSeats ?? this.totalSeats,
+      pricePerPerson: pricePerPerson ?? this.pricePerPerson,
       location: location ?? this.location,
       description: description ?? this.description,
       status: status ?? this.status,

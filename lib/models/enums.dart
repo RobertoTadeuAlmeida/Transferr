@@ -10,7 +10,7 @@ enum ExcursionStatus {
 enum PaymentStatus {
   pending,   // pendente
   paid,      // pago
-  partial,   // parcial
+  partial, free,   // parcial
 }
 
 /// Represents the possible attendance states of a participant.

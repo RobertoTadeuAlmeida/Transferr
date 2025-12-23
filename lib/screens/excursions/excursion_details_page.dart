@@ -70,7 +70,7 @@ class ExcursionDetailsPage extends StatelessWidget {
               context: context,
               title: 'Resumo Financeiro',
               details: {
-                'Clientes Confirmados:': '${excursion.totalClientsConfirmed}',
+                'Clientes Confirmados:': '${excursion.participants.length}',
                 'Renda Bruta:': NumberFormat.simpleCurrency(locale: 'pt_BR').format(excursion.grossRevenue),
                 'Renda Líquida (Est.):': NumberFormat.simpleCurrency(locale: 'pt_BR').format(excursion.netRevenue),
               },

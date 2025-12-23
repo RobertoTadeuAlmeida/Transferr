@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:transferr/models/client.dart';
 import 'package:transferr/models/excursion.dart';
 import '../models/enums.dart';
 import '../models/participant.dart';
@@ -121,7 +122,7 @@ class ExcursionProvider with ChangeNotifier {
       tempTotalSeats += excursion.totalSeats;
       tempGross += excursion.grossRevenue;
       tempNet += excursion.netRevenue;
-      tempClients += excursion.totalClientsConfirmed;
+      tempClients += excursion.participants.length;
       tempTotalPayments += excursion.participants.length;
       tempCompletePayments += excursion.participants
           .where((p) => p.paymentStatus == PaymentStatus.paid)
@@ -216,7 +217,6 @@ class ExcursionProvider with ChangeNotifier {
     }
   }
 
-
   Future<void> clearHistory() async {
     try {
       final historicalQuery = _firestore
@@ -254,6 +254,92 @@ class ExcursionProvider with ChangeNotifier {
     } catch (error) {
       print("Erro ao atualizar o status de destaque: $error");
       rethrow; // Lança o erro para que a UI possa, opcionalmente, mostrá-lo.
+    }
+  }
+
+  Future<void> addParticipantToExcursion({
+    required String excursionId,
+    required Client client, // Recebemos o objeto Client completo
+  }) async {
+    try {
+      // 1. Cria a instância de Participant com os dados corretos
+      final newParticipant = Participant(
+        clientId: client.id,
+        name: client.name,
+        // O campo 'registrationDate' é obrigatório.
+        // Usamos DateTime.now() para registrar o momento exato da adição.
+        registrationDate: DateTime.now(),
+        // Os outros campos (status, paymentStatus, amountPaid)
+        // já recebem seus valores padrão pelo construtor do modelo.
+      );
+
+      // 2. Chama o Firestore para fazer a atualização atômica
+      await _firestore.collection('excursions').doc(excursionId).update({
+        // 'participants' é o nome do array no seu documento do Firestore
+        'participants': FieldValue.arrayUnion([newParticipant.toMap()]),
+      });
+    } catch (e) {
+      print('[ExcursionProvider] Erro ao adicionar participante: $e');
+      rethrow; // Relança o erro para a UI tratar
+    }
+  }
+
+  // O método removeParticipantFromExcursion que já criamos continua correto.
+  Future<void> removeParticipantFromExcursion({
+    required String excursionId,
+    required Participant participant,
+  }) async {
+    try {
+      await _firestore.collection('excursions').doc(excursionId).update({
+        'participants': FieldValue.arrayRemove([participant.toMap()]),
+      });
+    } catch (e) {
+      print('[ExcursionProvider] Erro ao remover participante: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> updateParticipantPayment({
+    required String excursionId,
+    required Participant oldParticipant, // O objeto original para ser removido
+    required PaymentStatus newStatus, // O novo status vindo do formulário
+    required double newAmount, // O novo valor vindo do formulário
+  }) async {
+    try {
+      // 1. Cria uma nova instância do participante com os dados atualizados.
+      // Mantemos os dados originais que não mudam.
+      final updatedParticipant = Participant(
+        clientId: oldParticipant.clientId,
+        name: oldParticipant.name,
+        registrationDate: oldParticipant.registrationDate,
+        status: oldParticipant.status,
+        // O status geral do participante não muda aqui
+        // Campos que foram atualizados na tela de detalhes:
+        paymentStatus: newStatus,
+        amountPaid: newAmount,
+      );
+
+      // 2. Obtém a referência do documento da excursão no Firestore.
+      final docRef = _firestore.collection('excursions').doc(excursionId);
+
+      // 3. Executa a atualização atômica.
+      await docRef.update({
+        // Remove o objeto antigo do array 'participants'
+        'participants': FieldValue.arrayRemove([oldParticipant.toMap()]),
+      });
+      await docRef.update({
+        // Adiciona o novo objeto atualizado ao array 'participants'
+        'participants': FieldValue.arrayUnion([updatedParticipant.toMap()]),
+      });
+
+      // A stream que escuta as excursões irá notificar a UI sobre a mudança.
+    } catch (e) {
+      print(
+        '[ExcursionProvider] Erro ao atualizar pagamento do participante: $e',
+      );
+      // Relança o erro para que a UI (ParticipantDetailPage) possa capturá-lo
+      // e mostrar uma SnackBar para o usuário.
+      rethrow;
     }
   }
 
