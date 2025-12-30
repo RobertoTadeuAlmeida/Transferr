@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
+import 'package:transferr/config/theme/app_theme.dart';
+import 'package:transferr/utils/double_extensions.dart';
 import '../../models/enums.dart';
 import '../../models/excursion.dart';
-import '../../providers/client_provider.dart';
 import '../../providers/excursion_provider.dart';
-import 'add_passenger_page.dart'; // Importando a página correta
-import 'participant_detail_page.dart'; // Importando a página de detalhes
+import 'add_passenger_page.dart';
+import 'participant_detail_page.dart';
 
 class AddEditExcursionPage extends StatefulWidget {
   final Excursion? excursion;
-
   const AddEditExcursionPage({super.key, this.excursion});
 
   @override
@@ -20,10 +20,9 @@ class AddEditExcursionPage extends StatefulWidget {
 class _AddEditExcursionPageState extends State<AddEditExcursionPage> {
   final _formKey = GlobalKey<FormState>();
 
-  // Controllers para os campos do formulário
+  // Controllers
   late final TextEditingController _nameController;
-  late final TextEditingController
-  _pricePerPersonController; // CORREÇÃO: Nome padronizado
+  late final TextEditingController _pricePerPersonController;
   late final TextEditingController _totalSeatsController;
   late final TextEditingController _dateController;
   late final TextEditingController _locationController;
@@ -33,31 +32,23 @@ class _AddEditExcursionPageState extends State<AddEditExcursionPage> {
   bool _isLoading = false;
   bool _isFeatured = false;
 
+  // Lógica de initState, dispose, _saveExcursion, e _selectDate permanece a mesma.
+  // Apenas as SnackBars foram atualizadas para usarem as cores do tema.
   @override
   void initState() {
     super.initState();
     final excursion = widget.excursion;
-
     _nameController = TextEditingController(text: excursion?.name ?? '');
-    // CORREÇÃO: Usando pricePerPerson e formatando corretamente
     _pricePerPersonController = TextEditingController(
-      text: excursion?.pricePerPerson.toStringAsFixed(2) ?? '',
+      text: excursion?.pricePerPerson.toString().replaceAll('.', ',') ?? '',
     );
-    _totalSeatsController = TextEditingController(
-      text: excursion?.totalSeats.toString() ?? '',
-    );
-    _locationController = TextEditingController(
-      text: excursion?.location ?? '',
-    );
-    _descriptionController = TextEditingController(
-      text: excursion?.description ?? '',
-    );
+    _totalSeatsController = TextEditingController(text: excursion?.totalSeats.toString() ?? '');
+    _locationController = TextEditingController(text: excursion?.location ?? '');
+    _descriptionController = TextEditingController(text: excursion?.description ?? '');
 
     if (excursion != null) {
       _selectedDate = excursion.date;
-      _dateController = TextEditingController(
-        text: DateFormat('dd/MM/yyyy').format(excursion.date),
-      );
+      _dateController = TextEditingController(text: DateFormat('dd/MM/yyyy').format(excursion.date));
       _isFeatured = excursion.isFeatured;
     } else {
       _dateController = TextEditingController();
@@ -67,7 +58,7 @@ class _AddEditExcursionPageState extends State<AddEditExcursionPage> {
   @override
   void dispose() {
     _nameController.dispose();
-    _pricePerPersonController.dispose(); // CORREÇÃO
+    _pricePerPersonController.dispose();
     _totalSeatsController.dispose();
     _dateController.dispose();
     _locationController.dispose();
@@ -76,12 +67,15 @@ class _AddEditExcursionPageState extends State<AddEditExcursionPage> {
   }
 
   Future<void> _saveExcursion() async {
+    final theme = Theme.of(context);
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+
     if (!_formKey.currentState!.validate() || _selectedDate == null) {
-      if (_selectedDate == null && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Por favor, selecione uma data para a excursão.'),
-            backgroundColor: Colors.orange,
+      if (_selectedDate == null) {
+        scaffoldMessenger.showSnackBar(
+          SnackBar(
+            content: const Text('Por favor, selecione uma data para a excursão.'),
+            backgroundColor: AppTheme.warningColor.withOpacity(0.8),
           ),
         );
       }
@@ -93,26 +87,16 @@ class _AddEditExcursionPageState extends State<AddEditExcursionPage> {
     final provider = context.read<ExcursionProvider>();
 
     try {
-      // Cria o objeto Excursion com os dados do formulário
       final excursionData = Excursion(
         id: widget.excursion?.id,
         name: _nameController.text.trim(),
-        price:
-            double.tryParse(
-              _pricePerPersonController.text.replaceAll(',', '.'),
-            ) ??
-            0.0,
-        pricePerPerson:
-            double.tryParse(
-              _pricePerPersonController.text.replaceAll(',', '.'),
-            ) ??
-            0.0,
+        price: double.tryParse(_pricePerPersonController.text.replaceAll(',', '.')) ?? 0.0,
+        pricePerPerson: double.tryParse(_pricePerPersonController.text.replaceAll(',', '.')) ?? 0.0,
         totalSeats: int.tryParse(_totalSeatsController.text) ?? 0,
         date: _selectedDate!,
         location: _locationController.text.trim(),
         description: _descriptionController.text.trim(),
         isFeatured: _isFeatured,
-        // Mantém os valores existentes se estiver editando
         status: widget.excursion?.status ?? ExcursionStatus.agendada,
         participants: widget.excursion?.participants ?? [],
       );
@@ -125,19 +109,19 @@ class _AddEditExcursionPageState extends State<AddEditExcursionPage> {
 
       if (mounted) {
         Navigator.of(context).pop();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Excursão salva com sucesso!'),
-            backgroundColor: Colors.green,
+        scaffoldMessenger.showSnackBar(
+          SnackBar(
+            content: const Text('Excursão salva com sucesso!'),
+            backgroundColor: AppTheme.successColor,
           ),
         );
       }
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        scaffoldMessenger.showSnackBar(
           SnackBar(
-            content: Text('Erro ao salvar excursão: ${error.toString()}'),
-            backgroundColor: Colors.red,
+            content: Text('Erro ao salvar: ${error.toString()}'),
+            backgroundColor: theme.colorScheme.error,
           ),
         );
       }
@@ -163,53 +147,148 @@ class _AddEditExcursionPageState extends State<AddEditExcursionPage> {
     }
   }
 
-  Widget _buildParticipantsSection() {
-    if (widget.excursion == null) {
-      return const SizedBox.shrink();
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(widget.excursion == null ? 'Nova Excursão' : 'Editar Excursão'),
+        actions: [
+          if (_isLoading)
+            const Center(child: Padding(padding: EdgeInsets.only(right: 16.0), child: CircularProgressIndicator()))
+          else
+            IconButton(icon: const Icon(Icons.save_alt_rounded), onPressed: _saveExcursion, tooltip: 'Salvar'),
+        ],
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(16.0, 8.0, 16.0, 16.0),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const SizedBox(height: 8),
+              TextFormField(
+                controller: _nameController,
+                decoration: const InputDecoration(labelText: 'Nome da Excursão', prefixIcon: Icon(Icons.tour)),
+                validator: (value) => (value?.isEmpty ?? true) ? 'Insira um nome' : null,
+                textCapitalization: TextCapitalization.sentences,
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _dateController,
+                decoration: const InputDecoration(labelText: 'Data da Excursão', prefixIcon: Icon(Icons.calendar_today)),
+                readOnly: true,
+                onTap: () => _selectDate(context),
+                validator: (value) => (value?.isEmpty ?? true) ? 'Selecione uma data' : null,
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _locationController,
+                decoration: const InputDecoration(labelText: 'Local de Saída', prefixIcon: Icon(Icons.location_on)),
+                validator: (value) => (value?.isEmpty ?? true) ? 'Insira um local' : null,
+              ),
+              const SizedBox(height: 16),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: _pricePerPersonController,
+                      decoration: const InputDecoration(labelText: 'Valor (R\$)', prefixIcon: Icon(Icons.monetization_on)),
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      validator: (v) => (v == null || v.isEmpty || (double.tryParse(v.replaceAll(',', '.')) ?? -1) < 0) ? 'Inválido' : null,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: TextFormField(
+                      controller: _totalSeatsController,
+                      decoration: const InputDecoration(labelText: 'Assentos', prefixIcon: Icon(Icons.event_seat)),
+                      keyboardType: TextInputType.number,
+                      validator: (v) => (v == null || v.isEmpty || (int.tryParse(v) ?? 0) <= 0) ? 'Inválido' : null,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _descriptionController,
+                decoration: const InputDecoration(labelText: 'Descrição (opcional)', prefixIcon: Icon(Icons.description)),
+                maxLines: 3,
+                textCapitalization: TextCapitalization.sentences,
+              ),
+              const SizedBox(height: 10),
+              SwitchListTile(
+                title: Text('Marcar como Destaque', style: textTheme.bodyLarge),
+                subtitle: Text('A excursão aparecerá na tela principal.', style: textTheme.bodySmall?.copyWith(color: Colors.white70)),
+                value: _isFeatured,
+                onChanged: (bool value) => setState(() => _isFeatured = value),
+                contentPadding: EdgeInsets.zero,
+                // O estilo agora vem do SwitchThemeData
+              ),
+              if (widget.excursion != null) _buildParticipantsSection(context),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildParticipantsSection(BuildContext context) {
+    final participants = widget.excursion!.participants;
+    final textTheme = Theme.of(context).textTheme;
+
+    IconData getParticipantIcon(PaymentStatus status) {
+      switch (status) {
+        case PaymentStatus.paid:
+          return Icons.check_circle_rounded;
+        case PaymentStatus.free:
+          return Icons.celebration_rounded;
+        default:
+          return Icons.person_outline_rounded;
+      }
     }
 
-    final participants = widget.excursion!.participants;
+    Color getParticipantColor(PaymentStatus status) {
+      switch (status) {
+        case PaymentStatus.paid:
+          return AppTheme.successColor;
+        case PaymentStatus.free:
+          return AppTheme.infoColor;
+        default:
+          return AppTheme.warningColor;
+      }
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SizedBox(height: 24),
-        const Divider(),
         const SizedBox(height: 16),
+        const Divider(),
+        const SizedBox(height: 8),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              'Participantes (${participants.length})',
-              style: const TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-            ),
+            Text('Participantes (${participants.length})', style: textTheme.headlineSmall),
             TextButton.icon(
-              icon: const Icon(Icons.add),
+              icon: const Icon(Icons.person_add_alt_1_rounded),
               label: const Text('Adicionar'),
-              onPressed: () {
-                // Navega para a tela de adicionar passageiros
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (ctx) =>
-                        AddPassengerPage(excursionId: widget.excursion!.id!),
-                  ),
-                );
-              },
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (ctx) => AddPassengerPage(excursionId: widget.excursion!.id!)),
+              ),
             ),
           ],
         ),
         const SizedBox(height: 8),
         if (participants.isEmpty)
-          const Center(
+          Center(
             child: Padding(
-              padding: EdgeInsets.all(16.0),
+              padding: const EdgeInsets.all(16.0),
               child: Text(
                 'Nenhum participante adicionado ainda.',
-                style: TextStyle(color: Colors.white70),
+                style: textTheme.bodyMedium?.copyWith(color: Colors.white70),
               ),
             ),
           )
@@ -220,206 +299,32 @@ class _AddEditExcursionPageState extends State<AddEditExcursionPage> {
             itemCount: participants.length,
             itemBuilder: (context, index) {
               final participant = participants[index];
+              final statusColor = getParticipantColor(participant.paymentStatus);
               return Card(
-                margin: const EdgeInsets.symmetric(vertical: 6),
-                color: Colors.white.withOpacity(0.1),
                 child: ListTile(
-                  leading: Icon(
-                    participant.paymentStatus == PaymentStatus.paid
-                        ? Icons.check_circle
-                        : (participant.paymentStatus == PaymentStatus.free
-                              ? Icons.celebration
-                              : Icons.person),
-                    color: participant.paymentStatus == PaymentStatus.paid
-                        ? Colors.greenAccent
-                        : (participant.paymentStatus == PaymentStatus.free
-                              ? Colors.yellowAccent
-                              : Colors.white70),
-                  ),
-                  title: Text(
-                    participant.name,
-                    style: const TextStyle(color: Colors.white),
-                  ),
+                  leading: Icon(getParticipantIcon(participant.paymentStatus), color: statusColor),
+                  title: Text(participant.name, style: textTheme.bodyLarge),
                   subtitle: Text(
                     'Pagamento: ${participant.paymentStatus.name}',
-                    style: TextStyle(color: Colors.grey[400]),
+                    style: textTheme.bodySmall?.copyWith(color: Colors.white70),
                   ),
                   trailing: Text(
-                    'R\$ ${participant.amountPaid.toStringAsFixed(2)}',
-                    style: const TextStyle(
-                      color: Colors.amber,
-                      fontWeight: FontWeight.bold,
+                    participant.amountPaid.toCurrency(),
+                    style: textTheme.bodyMedium?.copyWith(color: statusColor, fontWeight: FontWeight.bold),
+                  ),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (ctx) => ParticipantDetailPage(
+                        excursionId: widget.excursion!.id!,
+                        initialParticipant: participant,
+                      ),
                     ),
                   ),
-                  onTap: () {
-                    // Abre a tela de detalhes para editar o pagamento deste participante
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (ctx) => ParticipantDetailPage(
-                          excursionId: widget.excursion!.id!,
-                          initialParticipant: participant,
-                        ),
-                      ),
-                    );
-                  },
                 ),
               );
             },
           ),
       ],
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          widget.excursion == null ? 'Nova Excursão' : 'Editar Excursão',
-        ),
-        actions: [
-          if (_isLoading)
-            const Center(
-              child: Padding(
-                padding: EdgeInsets.only(right: 16.0),
-                child: CircularProgressIndicator(color: Colors.white),
-              ),
-            )
-          else
-            IconButton(
-              icon: const Icon(Icons.save),
-              onPressed: _saveExcursion,
-              tooltip: 'Salvar',
-            ),
-        ],
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _buildTextFormField(
-                controller: _nameController,
-                labelText: 'Nome da Excursão',
-                icon: Icons.tour,
-                validator: (value) => value!.isEmpty ? 'Insira um nome' : null,
-              ),
-              _buildTextFormField(
-                controller: _dateController,
-                labelText: 'Data da Excursão',
-                icon: Icons.calendar_today,
-                readOnly: true,
-                onTap: () => _selectDate(context),
-                validator: (value) =>
-                    value!.isEmpty ? 'Selecione uma data' : null,
-              ),
-              _buildTextFormField(
-                controller: _locationController,
-                labelText: 'Local de Saída',
-                icon: Icons.location_on,
-                validator: (value) => value!.isEmpty ? 'Insira um local' : null,
-              ),
-              _buildTextFormField(
-                controller: _descriptionController,
-                labelText: 'Descrição (opcional)',
-                icon: Icons.description,
-                isMultiLine: true,
-              ),
-              Row(
-                children: [
-                  Expanded(
-                    // CORREÇÃO: Usando o controller correto
-                    child: _buildTextFormField(
-                      controller: _pricePerPersonController,
-                      labelText: 'Valor por Pessoa (R\$)',
-                      icon: Icons.monetization_on,
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                      validator: (value) {
-                        if (value == null || value.isEmpty)
-                          return 'Obrigatório';
-                        final price = double.tryParse(
-                          value.replaceAll(',', '.'),
-                        );
-                        if (price == null || price < 0)
-                          return 'Inválido'; // Permite valor 0
-                        return null;
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: _buildTextFormField(
-                      controller: _totalSeatsController,
-                      labelText: 'Assentos',
-                      icon: Icons.event_seat,
-                      keyboardType: TextInputType.number,
-                      validator: (value) {
-                        if (value == null || value.isEmpty)
-                          return 'Obrigatório';
-                        if ((int.tryParse(value) ?? -1) <= 0) return 'Inválido';
-                        return null;
-                      },
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              SwitchListTile(
-                title: const Text(
-                  'Marcar como Destaque',
-                  style: TextStyle(color: Colors.white),
-                ),
-                subtitle: const Text(
-                  'A excursão aparecerá na tela principal.',
-                  style: TextStyle(color: Colors.white70),
-                ),
-                value: _isFeatured,
-                onChanged: (bool value) => setState(() => _isFeatured = value),
-                activeColor: const Color(0xFFF97316),
-                contentPadding: EdgeInsets.zero,
-              ),
-              // Mostra a seção de participantes apenas se estiver editando uma excursão existente
-              if (widget.excursion != null) _buildParticipantsSection(),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTextFormField({
-    required TextEditingController controller,
-    required String labelText,
-    required IconData icon,
-    TextInputType keyboardType = TextInputType.text,
-    String? Function(String?)? validator,
-    bool readOnly = false,
-    void Function()? onTap,
-    bool isMultiLine = false,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0),
-      child: TextFormField(
-        controller: controller,
-        decoration: InputDecoration(
-          labelText: labelText,
-          prefixIcon: Icon(icon),
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-          filled: true,
-          fillColor: Colors.white.withOpacity(0.1),
-        ),
-        style: const TextStyle(color: Colors.white),
-        keyboardType: keyboardType,
-        validator: validator,
-        readOnly: readOnly,
-        onTap: onTap,
-        maxLines: isMultiLine ? 3 : 1,
-        minLines: isMultiLine ? 3 : 1,
-      ),
     );
   }
 }

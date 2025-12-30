@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:transferr/providers/excursion_provider.dart';
 import 'package:transferr/screens/excursions/add_edit_excursion_page.dart';
 import 'package:transferr/widgets/app_drawer.dart';
-import 'package:transferr/widgets/excursion_card.dart';
+import 'package:transferr/widgets/excursion_card.dart'; // Importa o widget correto
 
 import 'excursion_dashboard_page.dart';
 import 'history_page.dart';
@@ -16,13 +16,12 @@ class ExcursionsPage extends StatefulWidget {
 }
 
 class _ExcursionsPageState extends State<ExcursionsPage> {
+  // Lógica de estado para o modo de seleção
   bool _isSelectionMode = false;
-  // CORREÇÃO 1: Padronizando o nome da variável para ser mais claro.
   final Set<String> _selectedExcursionIds = {};
 
   void _toggleSelection(String excursionId) {
     setState(() {
-      // Usa o nome correto da variável
       if (_selectedExcursionIds.contains(excursionId)) {
         _selectedExcursionIds.remove(excursionId);
         if (_selectedExcursionIds.isEmpty) {
@@ -37,50 +36,73 @@ class _ExcursionsPageState extends State<ExcursionsPage> {
   void _exitSelectionMode() {
     setState(() {
       _isSelectionMode = false;
-      // Usa o nome correto da variável
       _selectedExcursionIds.clear();
     });
   }
 
-  void _confirmDeleteSelected() {
-    // Usa 'context.read' pois está fora do build, em uma ação.
-    final provider = context.read<ExcursionProvider>();
-    // Usa o nome correto da variável
-    provider.deleteMultipleExcursions(_selectedExcursionIds.toList());
-    _exitSelectionMode();
+  // Mostra um diálogo de confirmação antes de excluir
+  void _onDeletePressed() {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Confirmar Exclusão'),
+        content: Text(
+            'Tem certeza que deseja excluir as ${_selectedExcursionIds.length} excursões selecionadas? Esta ação não pode ser desfeita.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+            onPressed: () {
+              final provider = context.read<ExcursionProvider>();
+              provider.deleteMultipleExcursions(_selectedExcursionIds.toList());
+              Navigator.of(dialogContext).pop();
+              _exitSelectionMode();
+            },
+            child: const Text('Excluir'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    // Usa 'context.watch' para que a UI reconstrua com mudanças nos dados.
     final excursionProvider = context.watch<ExcursionProvider>();
     final activeExcursions = excursionProvider.activeExcursions;
+    final theme = Theme.of(context);
+    final textTheme = theme.textTheme;
 
     return Scaffold(
-      drawer: AppDrawer(),
+      drawer: const AppDrawer(),
       appBar: AppBar(
         leading: _isSelectionMode
             ? IconButton(
           icon: const Icon(Icons.close),
-          onPressed:
-          _exitSelectionMode, // Botão para sair do modo de seleção
+          onPressed: _exitSelectionMode,
+          tooltip: 'Sair da seleção',
         )
             : null,
-        // CORREÇÃO 2: Título dinâmico que mostra a contagem.
-        title: Text(_isSelectionMode
-            ? '${_selectedExcursionIds.length} selecionada(s)'
-            : 'Excursões Ativas'),
+        title: Text(
+          _isSelectionMode
+              ? '${_selectedExcursionIds.length} selecionada(s)'
+              : 'Excursões Ativas',
+        ),
         centerTitle: true,
         actions: [
           if (_isSelectionMode)
             IconButton(
-              icon: const Icon(Icons.delete_forever),
+              icon: Icon(Icons.delete_forever, color: theme.colorScheme.error),
               tooltip: 'Excluir Selecionadas',
-              onPressed: _confirmDeleteSelected, // Botão para excluir
+              onPressed: _onDeletePressed,
             )
           else
             IconButton(
-              icon: const Icon(Icons.history),
+              icon: const Icon(Icons.history_edu_outlined),
               tooltip: 'Histórico de Excursões',
               onPressed: () {
                 Navigator.push(
@@ -94,22 +116,19 @@ class _ExcursionsPageState extends State<ExcursionsPage> {
       body: excursionProvider.isLoading
           ? const Center(child: CircularProgressIndicator())
           : activeExcursions.isEmpty
-          ? const Center(
+          ? Center(
         child: Text(
           'Nenhuma excursão ativa no momento.',
-          style: TextStyle(fontSize: 16, color: Colors.white70),
+          style: textTheme.bodyLarge?.copyWith(color: Colors.white70),
         ),
       )
           : ListView.builder(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
         itemCount: activeExcursions.length,
         itemBuilder: (context, index) {
           final excursion = activeExcursions[index];
-          // CORREÇÃO 3: Define se o item está selecionado aqui.
-          final isSelected =
-          _selectedExcursionIds.contains(excursion.id);
+          final isSelected = _selectedExcursionIds.contains(excursion.id);
 
-          // Adiciona os gestos de clique e clique longo
           return GestureDetector(
             onLongPress: () {
               setState(() {
@@ -121,9 +140,6 @@ class _ExcursionsPageState extends State<ExcursionsPage> {
               if (_isSelectionMode) {
                 _toggleSelection(excursion.id!);
               } else {
-                // Se não estiver em modo de seleção, o clique no card
-                // pode levar para os detalhes (mantém a funcionalidade original)
-                // Se desejar que não faça nada, remova o `else`.
                 Navigator.push(
                   context,
                   MaterialPageRoute(
@@ -132,37 +148,25 @@ class _ExcursionsPageState extends State<ExcursionsPage> {
                 );
               }
             },
-            child: Container(
-              margin: const EdgeInsets.symmetric(vertical: 4.0),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(12.0),
-                // CORREÇÃO 4: Usa a variável `isSelected` para definir a borda.
-                border: isSelected
-                    ? Border.all(color: Colors.blue, width: 2.0)
-                    : null,
-              ),
-              child: ExcursionCard(excursion: excursion),
+            // O ExcursionCard agora desenha sua própria borda
+            child: ExcursionCard(
+              excursion: excursion,
+              isSelected: isSelected, // Passa o estado de seleção
             ),
           );
         },
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () {
-          // Verifica se está em modo de seleção para evitar ação indesejada
           if (!_isSelectionMode) {
             Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (context) => const AddEditExcursionPage(excursion: null),
-              ),
+              MaterialPageRoute(builder: (context) => const AddEditExcursionPage()),
             );
           }
         },
         label: const Text('Nova Excursão'),
         icon: const Icon(Icons.add),
-        backgroundColor: _isSelectionMode ? Colors.grey : Theme.of(context).primaryColor,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20.0),
-        ),
+        backgroundColor: _isSelectionMode ? Colors.grey.shade700 : theme.primaryColor,
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
     );

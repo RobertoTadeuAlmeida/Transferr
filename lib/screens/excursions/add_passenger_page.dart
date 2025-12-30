@@ -11,10 +11,11 @@ class AddPassengerPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Usamos 'watch' para que a UI se reconstrua ao buscar,
-    // e 'read' para chamar a ação de adicionar.
+    // Acesso aos providers e ao tema
     final clientProvider = context.watch<ClientProvider>();
     final excursionProvider = context.read<ExcursionProvider>();
+    final textTheme = Theme.of(context).textTheme;
+    final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
       appBar: AppBar(
@@ -23,17 +24,14 @@ class AddPassengerPage extends StatelessWidget {
       body: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.all(12.0),
+            padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 8.0),
+            // 1. TextField usa o estilo global do tema
             child: TextField(
-              decoration: InputDecoration(
-                labelText: 'Buscar cliente por nome, CPF ou telefone',
-                prefixIcon: const Icon(Icons.search),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12.0),
-                ),
+              decoration: const InputDecoration(
+                hintText: 'Buscar cliente...',
+                prefixIcon: Icon(Icons.search),
               ),
               onChanged: (value) {
-                // Reutilizamos a função de busca que já existe no ClientProvider!
                 clientProvider.searchClients(value);
               },
             ),
@@ -45,24 +43,40 @@ class AddPassengerPage extends StatelessWidget {
                   return const Center(child: CircularProgressIndicator());
                 }
                 if (provider.clients.isEmpty) {
-                  return const Center(child: Text('Nenhum cliente encontrado.'));
+                  return Center(
+                    // 2. Texto de status usa o tema
+                    child: Text(
+                      'Nenhum cliente encontrado.',
+                      style: textTheme.bodyLarge?.copyWith(color: Colors.white70),
+                    ),
+                  );
                 }
 
                 return ListView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: 8.0),
                   itemCount: provider.clients.length,
                   itemBuilder: (ctx, index) {
                     final client = provider.clients[index];
 
+                    // 3. ListTile e CircleAvatar usam cores do tema
                     return ListTile(
                       leading: CircleAvatar(
-                        child: Text(client.name.isNotEmpty ? client.name[0] : '?'),
+                        backgroundColor: colorScheme.primary.withOpacity(0.2),
+                        foregroundColor: colorScheme.primary,
+                        child: Text(
+                          client.name.isNotEmpty ? client.name[0].toUpperCase() : '?',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
                       ),
-                      title: Text(client.name),
-                      subtitle: Text('CPF: ${client.cpf}'),
-                      // Ação ao tocar em um cliente da lista
-                      onTap: () async {
+                      title: Text(client.name, style: textTheme.bodyLarge),
+                      subtitle: Text(
+                        'CPF: ${client.cpf}',
+                        style: textTheme.bodySmall?.copyWith(color: Colors.white70),
+                      ),
+                      onTap: () {
+                        // A chamada para o AlertDialog permanece a mesma,
+                        // mas agora ele será estilizado pelo tema.
                         _addPassenger(context, excursionProvider, client);
-
                       },
                     );
                   },
@@ -75,9 +89,7 @@ class AddPassengerPage extends StatelessWidget {
     );
   }
 
-  // Função para adicionar o passageiro e tratar o resultado
   void _addPassenger(BuildContext context, ExcursionProvider excursionProvider, Client client) async {
-    // Exibe um diálogo de confirmação
     bool? confirmed = await showDialog(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -86,9 +98,11 @@ class AddPassengerPage extends StatelessWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
+            // Os TextButtons já herdam o estilo do tema
             child: const Text('Cancelar'),
           ),
-          TextButton(
+          // 4. O botão de confirmação agora usa o estilo do ElevatedButtonTheme
+          ElevatedButton(
             onPressed: () => Navigator.of(dialogContext).pop(true),
             child: const Text('Adicionar'),
           ),
@@ -96,7 +110,6 @@ class AddPassengerPage extends StatelessWidget {
       ),
     );
 
-    // Se o usuário não confirmou, não faz nada
     if (confirmed != true) {
       return;
     }
@@ -106,18 +119,16 @@ class AddPassengerPage extends StatelessWidget {
         excursionId: excursionId,
         client: client,
       );
-
-      // Se a adição foi bem-sucedida, volta para a tela anterior
       if (context.mounted) {
         Navigator.of(context).pop();
       }
     } catch (e) {
-      // Mostra uma mensagem de erro se algo der errado
       if (context.mounted) {
+        // 5. SnackBar de erro usa a cor de erro do tema
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Erro ao adicionar passageiro: $e'),
-            backgroundColor: Colors.red,
+            content: Text('Erro ao adicionar: $e'),
+            backgroundColor: Theme.of(context).colorScheme.error,
           ),
         );
       }

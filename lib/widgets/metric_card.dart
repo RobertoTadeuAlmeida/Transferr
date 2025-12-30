@@ -16,14 +16,21 @@ class MetricCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 1. Acesso ao tema para cores e estilos
+    final theme = Theme.of(context);
+    final textTheme = theme.textTheme;
+
     return Card(
+      // O Card já é estilizado pelo cardTheme
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
+            // 2. Os textos agora usam o textTheme
             Text(
               title,
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              style: textTheme.titleMedium,
+              textAlign: TextAlign.center,
             ),
             const SizedBox(height: 12),
             Stack(
@@ -32,44 +39,33 @@ class MetricCard extends StatelessWidget {
                 SizedBox(
                   width: 80,
                   height: 80,
+                  // 3. O indicador de progresso agora usa o progressIndicatorTheme
                   child: CircularProgressIndicator(
-                    value: percentage,
+                    value: percentage.isNaN ? 0 : percentage, // Evita erro com NaN
                     strokeWidth: 8,
-                    backgroundColor: Colors.grey.shade700,
-                    valueColor: const AlwaysStoppedAnimation<Color>(
-                      Color(0xFFF97316),
-                    ),
+                    // A cor de fundo (track) e a cor do valor vêm do tema
                   ),
                 ),
                 Text(
-                  '${(percentage * 100).toStringAsFixed(0)}%',
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
+                  percentage.isNaN ? '0%' : '${(percentage * 100).toStringAsFixed(0)}%',
+                  style: textTheme.headlineSmall,
                 ),
               ],
             ),
             const SizedBox(height: 12),
             Text(
               value,
-              style: const TextStyle(
-                fontSize: 16,
+              style: textTheme.titleLarge?.copyWith(
+                color: theme.primaryColor,
                 fontWeight: FontWeight.bold,
-                color: Colors.white,
               ),
             ),
-
-            // Verifica se subValue não é nulo antes de tentar construir o widget
             if (subValue != null)
               Padding(
-                // Adiciona um espaçamento apenas se o texto for construído
                 padding: const EdgeInsets.only(top: 4.0),
                 child: Text(
                   subValue!,
-                  // Prometemos ao compilador que subValue não é nulo aqui
-                  style: TextStyle(fontSize: 14, color: Colors.grey[400]),
+                  style: textTheme.bodySmall?.copyWith(color: Colors.white60),
                 ),
               ),
           ],

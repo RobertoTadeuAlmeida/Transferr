@@ -1,9 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import '../../models/enums.dart';
-import '../../models/participant.dart';
-import '../../providers/excursion_provider.dart';
+import 'package:transferr/models/enums.dart';
+import 'package:transferr/models/participant.dart';
+import 'package:transferr/providers/excursion_provider.dart';
+
+// Classe que traduz o enum para nomes amigáveis
+extension PaymentStatusName on PaymentStatus {
+  String get displayName {
+    return switch (this) {
+      PaymentStatus.paid => 'Pago',
+      PaymentStatus.partial => 'Parcial',
+      PaymentStatus.pending => 'Pendente',
+      PaymentStatus.free => 'Cortesia',
+    };
+  }
+}
 
 class ParticipantDetailPage extends StatefulWidget {
   final String excursionId;
@@ -20,7 +32,6 @@ class ParticipantDetailPage extends StatefulWidget {
 }
 
 class _ParticipantDetailPageState extends State<ParticipantDetailPage> {
-  // Controladores para o formulário
   late final TextEditingController _amountPaidController;
   late PaymentStatus _selectedPaymentStatus;
   final _formKey = GlobalKey<FormState>();
@@ -28,7 +39,6 @@ class _ParticipantDetailPageState extends State<ParticipantDetailPage> {
   @override
   void initState() {
     super.initState();
-    // Inicializa o estado do formulário com os dados atuais do participante
     _amountPaidController = TextEditingController(
       text: widget.initialParticipant.amountPaid.toStringAsFixed(2),
     );
@@ -42,23 +52,29 @@ class _ParticipantDetailPageState extends State<ParticipantDetailPage> {
   }
 
   Future<void> _submitPaymentUpdate() async {
-    // Valida o formulário
     if (!_formKey.currentState!.validate()) {
       return;
     }
 
     final provider = context.read<ExcursionProvider>();
-    final newAmount = double.tryParse(_amountPaidController.text) ?? 0.0;
+    final newAmount = double.tryParse(_amountPaidController.text.replaceAll(',', '.')) ?? 0.0;
 
-    // Pede confirmação ao usuário
     final bool? confirmed = await showDialog<bool>(
       context: context,
+      // O AlertDialog agora é totalmente estilizado pelo dialogTheme
       builder: (ctx) => AlertDialog(
-        title: const Text('Confirmar Atualização'),
-        content: const Text('Deseja salvar as alterações de pagamento para este participante?'),
+        title: const Text('Confirmar Alterações'),
+        content: const Text('Deseja salvar as alterações de pagamento?'),
         actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancelar')),
-          FilledButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('Salvar')),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          // O FilledButton herda o estilo principal do tema
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Salvar'),
+          ),
         ],
       ),
     );
@@ -66,7 +82,6 @@ class _ParticipantDetailPageState extends State<ParticipantDetailPage> {
     if (confirmed != true || !mounted) return;
 
     try {
-      // Chama o método no provider que fará a mágica
       await provider.updateParticipantPayment(
         excursionId: widget.excursionId,
         oldParticipant: widget.initialParticipant,
@@ -74,25 +89,32 @@ class _ParticipantDetailPageState extends State<ParticipantDetailPage> {
         newAmount: newAmount,
       );
 
-      // Volta para a tela anterior se tudo der certo
-      Navigator.of(context).pop();
-
+      if (mounted) Navigator.of(context).pop();
     } catch (e) {
-      // Mostra um erro se algo falhar
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Erro ao atualizar pagamento: $e'), backgroundColor: Colors.red),
-      );
+      if (mounted) {
+        // A SnackBar usa o tema e a cor de erro dele
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erro ao atualizar: $e'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final textTheme = theme.textTheme;
+
     return Scaffold(
+      // O AppBar já é estilizado pelo tema
       appBar: AppBar(
         title: Text(widget.initialParticipant.name),
         actions: [
           IconButton(
-            icon: const Icon(Icons.save),
+            icon: const Icon(Icons.save_alt_rounded),
             onPressed: _submitPaymentUpdate,
             tooltip: 'Salvar Alterações',
           ),
@@ -103,47 +125,42 @@ class _ParticipantDetailPageState extends State<ParticipantDetailPage> {
         child: Form(
           key: _formKey,
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text('Gerenciar Pagamento', style: Theme.of(context).textTheme.titleLarge),
-              const Divider(height: 24),
+              Text('Gerenciar Pagamento', style: textTheme.headlineSmall),
+              const Divider(height: 24, color: Colors.white24),
 
-              // --- CAMPO VALOR PAGO ---
+              // O TextFormField usa o inputDecorationTheme do tema global
               TextFormField(
                 controller: _amountPaidController,
                 decoration: const InputDecoration(
                   labelText: 'Valor Pago',
                   prefixText: 'R\$ ',
-                  border: OutlineInputBorder(),
+                  // Não precisa mais de 'border', pois vem do tema
                 ),
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 inputFormatters: [
-                  FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
+                  FilteringTextInputFormatter.allow(RegExp(r'^\d+[,.]?\d{0,2}')),
                 ],
                 validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Por favor, insira um valor.';
-                  }
-                  if (double.tryParse(value) == null) {
-                    return 'Por favor, insira um número válido.';
-                  }
+                  if (value == null || value.isEmpty) return 'Insira um valor.';
+                  if (double.tryParse(value.replaceAll(',', '.')) == null) return 'Número inválido.';
                   return null;
                 },
               ),
               const SizedBox(height: 20),
 
-              // --- SELETOR DE STATUS DE PAGAMENTO ---
+              // O DropdownButtonFormField também usa o inputDecorationTheme
               DropdownButtonFormField<PaymentStatus>(
                 value: _selectedPaymentStatus,
                 decoration: const InputDecoration(
                   labelText: 'Status do Pagamento',
-                  border: OutlineInputBorder(),
                 ),
+                // O menu suspenso usa o dropdownMenuTheme
                 items: PaymentStatus.values.map((status) {
                   return DropdownMenuItem(
                     value: status,
-                    // Deixa os nomes mais amigáveis
-                    child: Text(status.name == 'pending' ? 'Pendente' : (status.name == 'partial' ? 'Parcial' : 'Pago')),
+                    child: Text(status.displayName), // Usa a extensão para nome amigável
                   );
                 }).toList(),
                 onChanged: (newValue) {
@@ -156,16 +173,12 @@ class _ParticipantDetailPageState extends State<ParticipantDetailPage> {
               ),
               const SizedBox(height: 32),
 
-              Center(
-                child: FilledButton.icon(
-                  icon: const Icon(Icons.save),
-                  label: const Text('Salvar Alterações'),
-                  onPressed: _submitPaymentUpdate,
-                  style: FilledButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
-                    textStyle: const TextStyle(fontSize: 16),
-                  ),
-                ),
+              // O FilledButton não precisa mais de estilo local
+              FilledButton.icon(
+                icon: const Icon(Icons.save),
+                label: const Text('Salvar Alterações'),
+                onPressed: _submitPaymentUpdate,
+                // O padding e textStyle já são definidos no elevatedButtonTheme
               ),
             ],
           ),

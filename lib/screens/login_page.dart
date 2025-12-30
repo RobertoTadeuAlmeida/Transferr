@@ -1,8 +1,6 @@
-// lib/screens/login_page.dart
-
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:transferr/screens/signup_page.dart'; // Garanta que este import está aqui
+import 'package:transferr/screens/signup_page.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -16,6 +14,8 @@ class _LoginPageState extends State<LoginPage> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isLoading = false;
+  // Para controlar a visibilidade da senha
+  bool _isPasswordObscured = true;
 
   @override
   void dispose() {
@@ -24,9 +24,8 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
-  // MÉTODO PARA LOGIN COM EMAIL E SENHA
   Future<void> _signInWithEmail() async {
-    // 1. Valida se os campos de e-mail e senha estão preenchidos corretamente
+    // Valida o formulário
     if (!_formKey.currentState!.validate()) {
       return;
     }
@@ -34,15 +33,12 @@ class _LoginPageState extends State<LoginPage> {
     setState(() => _isLoading = true);
 
     try {
-      // 2. Tenta fazer o login usando o serviço de autenticação do Firebase
       await FirebaseAuth.instance.signInWithEmailAndPassword(
-        email: _emailController.text.trim(), // Garante que não há espaços extras
+        email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
       );
-      // Se o login for bem-sucedido, o AuthWrapper cuidará do resto.
-
+      // O AuthWrapper cuidará da navegação em caso de sucesso.
     } catch (e) {
-      // 3. Se houver um erro, chama a função padronizada para mostrar a mensagem
       _handleAuthError(e);
     } finally {
       if (mounted) {
@@ -51,40 +47,28 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
-  // MÉTODO PADRONIZADO PARA LIDAR COM ERROS (igual ao da SignUpPage)
   void _handleAuthError(dynamic error) {
     String errorMessage = 'Ocorreu um erro desconhecido.';
 
     if (error is FirebaseAuthException) {
-      switch (error.code) {
-        case 'user-not-found':
-          errorMessage = 'Nenhum usuário encontrado com este e-mail.';
-          break;
-        case 'wrong-password':
-          errorMessage = 'Senha incorreta. Por favor, tente novamente.';
-          break;
-        case 'invalid-email':
-          errorMessage = 'O formato do e-mail fornecido é inválido.';
-          break;
-        case 'user-disabled':
-          errorMessage = 'Esta conta de usuário foi desativada.';
-          break;
-      // O erro que você recebeu se encaixa aqui:
-        case 'invalid-credential':
-          errorMessage = 'Credenciais incorretas. Verifique o e-mail e a senha.';
-          break;
-        default:
-          errorMessage = 'Ocorreu um erro de autenticação. Tente mais tarde.';
-      }
+      errorMessage = switch (error.code) {
+        'user-not-found' => 'Nenhum usuário encontrado com este e-mail.',
+        'wrong-password' => 'Senha incorreta. Por favor, tente novamente.',
+        'invalid-email' => 'O formato do e-mail fornecido é inválido.',
+        'user-disabled' => 'Esta conta de usuário foi desativada.',
+        'invalid-credential' => 'Credenciais incorretas. Verifique o e-mail e a senha.',
+        _ => 'Ocorreu um erro de autenticação. Tente mais tarde.',
+      };
     } else {
       errorMessage = error.toString();
     }
 
     if (mounted) {
+      // 1. SnackBar usa o tema para a cor de fundo e estilo
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(errorMessage),
-          backgroundColor: Colors.redAccent,
+          backgroundColor: Theme.of(context).colorScheme.error,
         ),
       );
     }
@@ -92,8 +76,11 @@ class _LoginPageState extends State<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
-    // A UI permanece a mesma, mas agora se conecta à lógica corrigida
+    final theme = Theme.of(context);
+    final textTheme = theme.textTheme;
+
     return Scaffold(
+      // O AppBar já é estilizado pelo tema
       appBar: AppBar(title: const Text('Login'), centerTitle: true),
       body: Center(
         child: SingleChildScrollView(
@@ -104,24 +91,29 @@ class _LoginPageState extends State<LoginPage> {
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                // Os textos já estão usando o tema corretamente
                 Text(
-                  'Bem-vindo ao Transferr',
+                  'Bem-vindo de volta!',
                   textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+                  style: textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 8),
                 Text(
                   'Acesse sua conta para continuar',
                   textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.white70),
+                  style: textTheme.bodyMedium?.copyWith(color: Colors.white70),
                 ),
                 const SizedBox(height: 40),
 
-                // Campo de E-mail
+                // 2. TextFormField agora usa 100% do inputDecorationTheme
                 TextFormField(
                   controller: _emailController,
-                  decoration: const InputDecoration(labelText: 'E-mail', border: OutlineInputBorder(), prefixIcon: Icon(Icons.email_outlined)),
+                  decoration: const InputDecoration(
+                    labelText: 'E-mail',
+                    prefixIcon: Icon(Icons.email_outlined),
+                  ),
                   keyboardType: TextInputType.emailAddress,
+                  autofillHints: const [AutofillHints.email],
                   validator: (value) {
                     if (value == null || value.trim().isEmpty) return 'Por favor, digite seu e-mail.';
                     if (!value.contains('@') || !value.contains('.')) return 'Digite um e-mail válido.';
@@ -130,11 +122,25 @@ class _LoginPageState extends State<LoginPage> {
                 ),
                 const SizedBox(height: 16),
 
-                // Campo de Senha
                 TextFormField(
                   controller: _passwordController,
-                  decoration: const InputDecoration(labelText: 'Senha', border: OutlineInputBorder(), prefixIcon: Icon(Icons.lock_outline)),
-                  obscureText: true,
+                  obscureText: _isPasswordObscured,
+                  autofillHints: const [AutofillHints.password],
+                  decoration: InputDecoration(
+                    labelText: 'Senha',
+                    prefixIcon: const Icon(Icons.lock_outline),
+                    // Adiciona um ícone para mostrar/ocultar a senha
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        _isPasswordObscured ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          _isPasswordObscured = !_isPasswordObscured;
+                        });
+                      },
+                    ),
+                  ),
                   validator: (value) {
                     if (value == null || value.isEmpty) return 'Por favor, digite sua senha.';
                     if (value.length < 6) return 'A senha deve ter no mínimo 6 caracteres.';
@@ -143,31 +149,26 @@ class _LoginPageState extends State<LoginPage> {
                 ),
                 const SizedBox(height: 24),
 
-                // Botão de Entrar
+                // 3. O botão de Entrar não precisa mais de estilo local
                 _isLoading
                     ? const Center(child: CircularProgressIndicator())
                     : ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
                   onPressed: _signInWithEmail,
                   child: const Text('Entrar'),
                 ),
                 const SizedBox(height: 24),
 
-                // Link para Criar Conta
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Text('Não tem uma conta?', style: TextStyle(color: Colors.white70)),
+                    Text('Não tem uma conta?', style: textTheme.bodyMedium?.copyWith(color: Colors.white70)),
+                    // 4. O TextButton agora usa a cor primária do tema
                     TextButton(
                       onPressed: () {
-                        Navigator.of(context).push(
+                        Navigator.of(context).pushReplacement(
                           MaterialPageRoute(builder: (context) => const SignUpPage()),
                         );
                       },
-                      style: TextButton.styleFrom(foregroundColor: Colors.white),
                       child: const Text('Cadastre-se'),
                     ),
                   ],

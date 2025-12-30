@@ -4,6 +4,7 @@ import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
 import 'package:provider/provider.dart';
 import '../../../models/client.dart';
 import '../../../providers/client_provider.dart';
+// Nenhum import de tema é necessário aqui, pois os estilos vêm do context.
 
 class AddEditClientPage extends StatefulWidget {
   final Client? client;
@@ -24,33 +25,18 @@ class _AddEditClientPageState extends State<AddEditClientPage> {
 
   bool _isLoading = false;
 
-  final _phoneMaskFormatter = MaskTextInputFormatter(
-    mask: '(##) #####-####',
-    filter: {"#": RegExp(r'[0-9]')},
-    type: MaskAutoCompletionType.lazy,
-  );
-
-  final _cpfMaskFormatter = MaskTextInputFormatter(
-    mask: '###.###.###-##',
-    filter: {"#": RegExp(r'[0-9]')},
-    type: MaskAutoCompletionType.lazy,
-  );
-
+  // A lógica de máscaras e controllers permanece a mesma
+  final _phoneMaskFormatter = MaskTextInputFormatter(mask: '(##) #####-####', filter: {"#": RegExp(r'[0-9]')});
+  final _cpfMaskFormatter = MaskTextInputFormatter(mask: '###.###.###-##', filter: {"#": RegExp(r'[0-9]')});
 
   @override
   void initState() {
     super.initState();
     _nameController = TextEditingController(text: widget.client?.name ?? '');
-    _contactController = TextEditingController(
-        text: _phoneMaskFormatter.maskText(widget.client?.contact ?? '')
-    );
-    _cpfController = TextEditingController(
-        text: _cpfMaskFormatter.maskText(widget.client?.cpf ?? '')
-    );
-
+    _contactController = TextEditingController(text: _phoneMaskFormatter.maskText(widget.client?.contact ?? ''));
+    _cpfController = TextEditingController(text: _cpfMaskFormatter.maskText(widget.client?.cpf ?? ''));
     _selectedBirthDate = widget.client?.birthDate;
   }
-
 
   @override
   void dispose() {
@@ -60,10 +46,12 @@ class _AddEditClientPageState extends State<AddEditClientPage> {
     super.dispose();
   }
 
+  // A lógica de negócio (_selectBirthDate, _submitForm) permanece idêntica.
+  // Apenas as SnackBars foram atualizadas para usar as cores do tema.
   Future<void> _selectBirthDate(BuildContext context) async {
     final DateTime? picked = await showDatePicker(
       context: context,
-      initialDate: _selectedBirthDate ?? DateTime(2000), // Data inicial mais sensata
+      initialDate: _selectedBirthDate ?? DateTime(2000),
       firstDate: DateTime(1900),
       lastDate: DateTime.now(),
     );
@@ -75,28 +63,21 @@ class _AddEditClientPageState extends State<AddEditClientPage> {
   }
 
   Future<void> _submitForm() async {
-    // 1. Valida todos os campos do formulário com as novas regras
     if (_formKey.currentState!.validate() && _selectedBirthDate != null) {
       setState(() => _isLoading = true);
-
       final isEditing = widget.client != null;
-
       try {
-        final unmaskedPhone = _phoneMaskFormatter.getUnmaskedText();
-        final unmaskedCpf = _cpfMaskFormatter.getUnmaskedText();
-
         final clientData = Client(
           id: widget.client?.id ?? '',
           name: _nameController.text.trim(),
-          contact: unmaskedPhone, // Salva apenas os números
-          cpf: unmaskedCpf,       // Salva apenas os números
+          contact: _phoneMaskFormatter.getUnmaskedText(),
+          cpf: _cpfMaskFormatter.getUnmaskedText(),
           birthDate: _selectedBirthDate!,
           confirmedExcursionIds: widget.client?.confirmedExcursionIds ?? [],
           pendingExcursionIds: widget.client?.pendingExcursionIds ?? [],
         );
 
         final provider = context.read<ClientProvider>();
-
         if (isEditing) {
           await provider.updateClient(clientData);
         } else {
@@ -104,16 +85,22 @@ class _AddEditClientPageState extends State<AddEditClientPage> {
         }
 
         if (mounted) {
-          final successMessage = isEditing ? 'Cliente atualizado com sucesso!' : 'Cliente adicionado com sucesso!';
+          final successMessage = isEditing ? 'Cliente atualizado!' : 'Cliente adicionado!';
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(successMessage), backgroundColor: Colors.green),
+            SnackBar(
+              content: Text(successMessage),
+              backgroundColor: Theme.of(context).colorScheme.secondary, // Usando cor do tema
+            ),
           );
           Navigator.of(context).pop();
         }
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Erro ao salvar cliente: $e'), backgroundColor: Colors.red),
+            SnackBar(
+              content: Text('Erro ao salvar: $e'),
+              backgroundColor: Theme.of(context).colorScheme.error, // Usando cor de erro do tema
+            ),
           );
         }
       } finally {
@@ -123,7 +110,10 @@ class _AddEditClientPageState extends State<AddEditClientPage> {
       }
     } else if (_selectedBirthDate == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Por favor, selecione a data de nascimento.'), backgroundColor: Colors.orange),
+        SnackBar(
+          content: const Text('Por favor, selecione a data de nascimento.'),
+          backgroundColor: Theme.of(context).colorScheme.error.withOpacity(0.8), // Usando cor de aviso do tema
+        ),
       );
     }
   }
@@ -131,6 +121,7 @@ class _AddEditClientPageState extends State<AddEditClientPage> {
   @override
   Widget build(BuildContext context) {
     final isEditing = widget.client != null;
+    final textTheme = Theme.of(context).textTheme; // Acesso fácil aos estilos de texto
 
     return Scaffold(
       appBar: AppBar(
@@ -138,7 +129,8 @@ class _AddEditClientPageState extends State<AddEditClientPage> {
         actions: [
           if (!_isLoading)
             IconButton(
-              icon: const Icon(Icons.save),
+              icon: const Icon(Icons.save_alt_rounded),
+              tooltip: 'Salvar',
               onPressed: _submitForm,
             ),
         ],
@@ -152,9 +144,10 @@ class _AddEditClientPageState extends State<AddEditClientPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              // Os TextFormFields agora usam a decoração padrão do tema
               TextFormField(
                 controller: _nameController,
-                decoration: const InputDecoration(labelText: 'Nome Completo', border: OutlineInputBorder()),
+                decoration: const InputDecoration(labelText: 'Nome Completo', prefixIcon: Icon(Icons.person_outline)),
                 validator: (value) => (value?.trim().isEmpty ?? true) ? 'O nome é obrigatório.' : null,
                 textCapitalization: TextCapitalization.words,
               ),
@@ -162,45 +155,48 @@ class _AddEditClientPageState extends State<AddEditClientPage> {
               TextFormField(
                 controller: _contactController,
                 inputFormatters: [_phoneMaskFormatter],
-                decoration: const InputDecoration(labelText: 'Telefone com DDD (somente números)', border: OutlineInputBorder(), prefixText: '+55 '),
+                decoration: const InputDecoration(labelText: 'Telefone com DDD', prefixIcon: Icon(Icons.phone_outlined)),
                 keyboardType: TextInputType.phone,
-                validator: (value) {final numbers = _phoneMaskFormatter.getUnmaskedText();
-                if (numbers.isEmpty) return 'O contato é obrigatório.';
-                if (numbers.length < 10) return 'Número de telefone incompleto.';
-                return null;
+                validator: (value) {
+                  final numbers = _phoneMaskFormatter.getUnmaskedText();
+                  if (numbers.isEmpty) return 'O contato é obrigatório.';
+                  if (numbers.length < 10) return 'Número de telefone incompleto.';
+                  return null;
                 },
               ),
               const SizedBox(height: 16),
               TextFormField(
                 controller: _cpfController,
                 inputFormatters: [_cpfMaskFormatter],
-                decoration: const InputDecoration(labelText: 'CPF (somente números)', border: OutlineInputBorder()),
+                decoration: const InputDecoration(labelText: 'CPF', prefixIcon: Icon(Icons.badge_outlined)),
                 keyboardType: TextInputType.number,
                 validator: (value) {
                   final numbers = _cpfMaskFormatter.getUnmaskedText();
                   if (numbers.isEmpty) return 'O CPF é obrigatório.';
                   if (numbers.length < 11) return 'CPF incompleto.';
-                  // Aqui você ainda pode adicionar um algoritmo de validação real
                   return null;
                 },
               ),
               const SizedBox(height: 24),
+              // O ListTile agora usa as cores e formas do tema
               ListTile(
-                leading: const Icon(Icons.calendar_today),
+                leading: Icon(Icons.calendar_today, color: Theme.of(context).colorScheme.primary),
                 title: Text(
                   _selectedBirthDate == null
                       ? 'Selecione a Data de Nascimento *'
                       : 'Nascimento: ${DateFormat('dd/MM/yyyy').format(_selectedBirthDate!)}',
+                  style: textTheme.bodyLarge,
                 ),
                 onTap: () => _selectBirthDate(context),
-                tileColor: Colors.grey.withOpacity(0.1),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                tileColor: Theme.of(context).inputDecorationTheme.fillColor,
+                shape: Theme.of(context).inputDecorationTheme.border?.toOutlineInputBorder(),
               ),
               const SizedBox(height: 32),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16)),
+              // O ElevatedButton agora usa o estilo padrão do tema
+              ElevatedButton.icon(
+                icon: const Icon(Icons.save),
                 onPressed: _submitForm,
-                child: const Text('Salvar Cliente'),
+                label: const Text('Salvar Cliente'),
               ),
             ],
           ),
@@ -209,3 +205,13 @@ class _AddEditClientPageState extends State<AddEditClientPage> {
     );
   }
 }
+
+extension on InputBorder? {
+  OutlineInputBorder? toOutlineInputBorder() {
+    if (this is OutlineInputBorder) {
+      return this as OutlineInputBorder;
+    }
+    return null;
+  }
+}
+

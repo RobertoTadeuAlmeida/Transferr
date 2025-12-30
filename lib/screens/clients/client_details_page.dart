@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart'; // 1. IMPORTAR PARA FORMATAÇÃO DE DATA
 import 'package:provider/provider.dart';
+import 'package:transferr/config/theme/app_theme.dart'; // 2. IMPORTAR PARA CORES DE STATUS
+import '../../models/client.dart';
 import '../../providers/client_provider.dart';
 import '../../providers/excursion_provider.dart';
 import 'add_edit_client_page.dart';
@@ -11,130 +14,112 @@ class ClientDetailsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 3. [MUDANÇA] Busca o cliente e as excursões usando os Providers.
+    // Acesso aos providers e ao tema
     final clientProvider = context.watch<ClientProvider>();
     final excursionProvider = context.watch<ExcursionProvider>();
-
-    // Usa o ID para encontrar o objeto Client completo na lista do provider.
     final client = clientProvider.getClientById(clientId);
+    final textTheme = Theme.of(context).textTheme;
+    final colorScheme = Theme.of(context).colorScheme;
 
-    // 4. [MUDANÇA] Adiciona tratamento para casos de erro (cliente não encontrado).
+    // Tela de erro, agora usando estilos do tema
     if (client == null) {
-      // Isso pode acontecer se a lista de clientes ainda estiver carregando
-      // ou se o ID for inválido por algum motivo.
       return Scaffold(
         appBar: AppBar(title: const Text('Erro')),
-        body: const Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                'Cliente não encontrado.',
-                style: TextStyle(color: Colors.white, fontSize: 18),
-              ),
-              SizedBox(height: 10),
-              Text(
-                'Aguarde ou tente voltar e selecionar novamente.',
-                style: TextStyle(color: Colors.white70),
-                textAlign: TextAlign.center,
-              ),
-            ],
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  'Cliente não encontrado.',
+                  style: textTheme.titleLarge,
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  'Aguarde ou tente voltar e selecionar novamente.',
+                  style: textTheme.bodyMedium?.copyWith(color: Colors.white70),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
           ),
         ),
       );
     }
 
-    // O resto da sua UI continua igual, usando a variável 'client' que acabamos de buscar.
+    // Tela principal, agora usando estilos do tema
     return Scaffold(
       appBar: AppBar(
         title: Text(client.name),
-        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-        foregroundColor: Colors.white,
-        elevation: 0,
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Card de Informações
             Card(
-              elevation: 4,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16.0),
-              ),
-              color: Theme.of(context).cardColor,
               child: Padding(
                 padding: const EdgeInsets.all(20.0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Informações do Cliente',
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
+                    Text('Informações do Cliente', style: textTheme.headlineSmall),
                     const SizedBox(height: 16),
-                    _buildDetailRow('Nome:', client.name),
-                    _buildDetailRow('Contato:', client.contact),
-                    _buildDetailRow('CPF:', client.cpf),
+                    _buildDetailRow('Nome:', client.name, context),
+                    _buildDetailRow('Contato:', client.contact, context),
+                    _buildDetailRow('CPF:', client.cpf, context),
                     _buildDetailRow(
-                      'Data de Nascimento:',
-                      '${client.birthDate.day}/${client.birthDate.month}/${client.birthDate.year}',
+                      'Nascimento:',
+                      DateFormat('dd/MM/yyyy').format(client.birthDate), // Melhor formatação
+                      context,
                     ),
                   ],
                 ),
               ),
             ),
             const SizedBox(height: 20),
+            // Card de Excursões
             Card(
-              elevation: 4,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16.0),
-              ),
-              color: Theme.of(context).cardColor,
               child: Padding(
                 padding: const EdgeInsets.all(20.0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Excursões do Cliente',
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
+                    Text('Excursões do Cliente', style: textTheme.headlineSmall),
                     const SizedBox(height: 10),
-                    // 5. [MELHORIA] Usa o ExcursionProvider para mostrar o nome real das excursões.
-                    if (client.confirmedExcursionIds.isEmpty &&
-                        client.pendingExcursionIds.isEmpty)
-                      const Text(
-                        'Nenhuma excursão associada a este cliente.',
-                        style: TextStyle(color: Colors.white70),
+                    if (client.confirmedExcursionIds.isEmpty && client.pendingExcursionIds.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8.0),
+                        child: Text(
+                          'Nenhuma excursão associada a este cliente.',
+                          style: textTheme.bodyMedium?.copyWith(color: Colors.white70),
+                        ),
                       ),
                     if (client.confirmedExcursionIds.isNotEmpty)
                       _buildExcursionList(
-                        'Confirmadas:',
-                        client.confirmedExcursionIds,
-                        Colors.greenAccent,
-                        excursionProvider, // Passa o provider como argumento
+                        context,
+                        title: 'Confirmadas:',
+                        excursionIds: client.confirmedExcursionIds,
+                        color: AppTheme.successColor, // Usando cor do tema
+                        excursionProvider: excursionProvider,
                       ),
                     if (client.pendingExcursionIds.isNotEmpty)
                       _buildExcursionList(
-                        'Pendentes:',
-                        client.pendingExcursionIds,
-                        Colors.amberAccent,
-                        excursionProvider, // Passa o provider como argumento
+                        context,
+                        title: 'Pendentes:',
+                        excursionIds: client.pendingExcursionIds,
+                        color: AppTheme.warningColor, // Usando cor do tema
+                        excursionProvider: excursionProvider,
                       ),
                   ],
                 ),
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 24),
+            // Botão centralizado
             Center(
               child: ElevatedButton.icon(
                 onPressed: () {
@@ -145,9 +130,8 @@ class ClientDetailsPage extends StatelessWidget {
                     ),
                   );
                 },
-                icon: const Icon(Icons.edit),
+                icon: const Icon(Icons.edit_note_rounded),
                 label: const Text('Editar Cliente'),
-                style: Theme.of(context).elevatedButtonTheme.style,
               ),
             ),
           ],
@@ -156,25 +140,19 @@ class ClientDetailsPage extends StatelessWidget {
     );
   }
 
-  Widget _buildDetailRow(String label, String value) {
+  // Métodos auxiliares agora recebem o BuildContext para acessar o tema
+  Widget _buildDetailRow(String label, String value, BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4.0),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-            ),
-          ),
-          const SizedBox(width: 8),
+          Text('$label ', style: textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold)),
           Expanded(
             child: Text(
               value,
-              style: const TextStyle(fontSize: 16, color: Colors.white70),
+              style: textTheme.bodyLarge?.copyWith(color: Colors.white70),
             ),
           ),
         ],
@@ -182,13 +160,14 @@ class ClientDetailsPage extends StatelessWidget {
     );
   }
 
-  // 6. [MUDANÇA] O método agora recebe o ExcursionProvider para buscar os nomes.
   Widget _buildExcursionList(
-    String title,
-    List<String> excursionIds,
-    Color color,
-    ExcursionProvider excursionProvider,
-  ) {
+      BuildContext context, {
+        required String title,
+        required List<String> excursionIds,
+        required Color color,
+        required ExcursionProvider excursionProvider,
+      }) {
+    final textTheme = Theme.of(context).textTheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -196,28 +175,21 @@ class ClientDetailsPage extends StatelessWidget {
           padding: const EdgeInsets.symmetric(vertical: 8.0),
           child: Text(
             title,
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: color,
-            ),
+            style: textTheme.titleMedium?.copyWith(color: color, fontWeight: FontWeight.bold),
           ),
         ),
         ...excursionIds.map((id) {
-          // Busca o nome da excursão usando o ID.
-          final excursionName =
-              excursionProvider.getExcursionById(id)?.name ??
-              'Excursão não encontrada';
+          final excursionName = excursionProvider.getExcursionById(id)?.name ?? 'Excursão não encontrada';
           return Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4.0, horizontal: 8.0),
+            padding: const EdgeInsets.only(left: 8.0, top: 4.0, bottom: 4.0),
             child: Row(
               children: [
-                Icon(Icons.arrow_right, color: color),
+                Icon(Icons.arrow_right, color: color, size: 20),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    excursionName, // Mostra o nome real.
-                    style: const TextStyle(fontSize: 16, color: Colors.white70),
+                    excursionName,
+                    style: textTheme.bodyMedium?.copyWith(color: Colors.white70),
                   ),
                 ),
               ],

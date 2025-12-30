@@ -9,6 +9,7 @@ import 'package:transferr/screens/clients/clients_list_page.dart';
 import 'package:transferr/screens/excursions/excursion_dashboard_page.dart';
 import 'package:transferr/screens/excursions/excursions_page.dart';
 import 'package:transferr/screens/settings_page.dart';
+import 'config/theme/app_theme.dart';
 import 'providers/excursion_provider.dart';
 import 'screens/clients/client_details_page.dart';
 import 'screens/finance_page.dart';
@@ -28,14 +29,12 @@ final String initialAuthToken = const String.fromEnvironment(
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (context) => ExcursionProvider()),
-        // 2. USE ChangeNotifierProxyProvider para o ClientProvider
         ChangeNotifierProxyProvider<ExcursionProvider, ClientProvider>(
           create: (context) => ClientProvider(),
           update: (context, excursionProvider, previousClientProvider) =>
@@ -54,86 +53,29 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Transferr',
-      theme: ThemeData(
-        scaffoldBackgroundColor: const Color(0xFF1A1A1A),
-        fontFamily: 'Inter',
-        visualDensity: VisualDensity.adaptivePlatformDensity,
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFF1A1A1A),
-          foregroundColor: Colors.white,
-          elevation: 0,
-          iconTheme: IconThemeData(color: Colors.white),
-        ),
-        drawerTheme: const DrawerThemeData(backgroundColor: Color(0xFF1A1A1A)),
-        colorScheme: const ColorScheme.dark(
-          primary: Color(0xFFF97316),
-          surface: Color(0xFF1A1A1A),
-          onSurface: Colors.white,
-          secondary: Color(0xFFF97316),
-        ),
-        textTheme: const TextTheme(
-          bodyLarge: TextStyle(color: Colors.white),
-          bodyMedium: TextStyle(color: Colors.white),
-          displayLarge: TextStyle(color: Colors.white),
-          displayMedium: TextStyle(color: Colors.white),
-          displaySmall: TextStyle(color: Colors.white),
-          headlineLarge: TextStyle(color: Colors.white),
-          headlineMedium: TextStyle(color: Colors.white),
-          headlineSmall: TextStyle(color: Colors.white),
-          titleLarge: TextStyle(color: Colors.white),
-          titleMedium: TextStyle(color: Colors.white),
-          titleSmall: TextStyle(color: Colors.white),
-          labelLarge: TextStyle(color: Colors.white),
-          labelMedium: TextStyle(color: Colors.white),
-          labelSmall: TextStyle(color: Colors.white),
-        ),
-        elevatedButtonTheme: ElevatedButtonThemeData(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFFF97316),
-            // Cor de fundo dos botões
-            foregroundColor: Colors.white,
-            // Cor do texto dos botões
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(
-                10.0,
-              ), // Cantos arredondados para botões
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-          ),
-        ),
-        floatingActionButtonTheme: const FloatingActionButtonThemeData(
-          backgroundColor: Color(0xFFF97316), // Cor do FAB
-          foregroundColor: Colors.white, // Cor do ícone/texto do FAB
-        ),
-        cardTheme: CardThemeData(
-          margin: const EdgeInsets.all(8.0),
-          elevation: 4,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(
-              16.0,
-            ), // Cantos arredondados mais proeminentes
-          ),
-          color: const Color(0xFFF97316), // Cor dos cartões
-        ),
-      ),
+      debugShowCheckedModeBanner: false, // Adicionado para limpar a UI
+
+      // 2. APLIQUE O TEMA DO ARQUIVO EXTERNO
+      theme: AppTheme.darkTheme,
+
+      // 3. O gerenciamento de rotas permanece o mesmo
       initialRoute: '/',
       routes: {
         '/': (context) => AuthWrapper(),
         '/excursions': (context) => const ExcursionsPage(),
         '/excursion_details': (context) {
           final String excursionId =
-              ModalRoute.of(context)!.settings.arguments as String;
+          ModalRoute.of(context)!.settings.arguments as String;
           return ExcursionDashboardPage(excursionId: excursionId);
         },
         '/clients': (context) => const ClientsListPage(),
         '/add_edit_client': (context) => const AddEditClientPage(),
         '/client_details': (context) {
           final String clientId =
-              ModalRoute.of(context)!.settings.arguments as String;
+          ModalRoute.of(context)!.settings.arguments as String;
           return ClientDetailsPage(clientId: clientId);
         },
         '/settings': (context) => const SettingsPage(),
-
         '/finance': (context) => const FinancePage(),
       },
     );

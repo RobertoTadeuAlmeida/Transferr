@@ -18,38 +18,58 @@ class _SettingsPageState extends State<SettingsPage> {
     _loadVersionInfo();
   }
 
-  /// Carrega a versão do app a partir do pubspec.yaml
   Future<void> _loadVersionInfo() async {
-    final packageInfo = await PackageInfo.fromPlatform();
-    setState(() {
-      _appVersion = 'Versão ${packageInfo.version} (${packageInfo.buildNumber})';
-    });
+    try {
+      final packageInfo = await PackageInfo.fromPlatform();
+      if (mounted) {
+        setState(() {
+          _appVersion = 'Versão ${packageInfo.version} (build ${packageInfo.buildNumber})';
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _appVersion = 'Não foi possível carregar a versão';
+        });
+      }
+    }
   }
 
-  /// Executa o logout do usuário no Firebase Auth
   Future<void> _logout() async {
     try {
       await FirebaseAuth.instance.signOut();
-      // Após o logout, o AuthWrapper (ou sua tela de login) assumirá o controle.
-      // É uma boa prática navegar para a rota raiz e remover todas as outras.
       if (mounted) {
         Navigator.of(context).pushNamedAndRemoveUntil('/', (Route<dynamic> route) => false);
       }
     } catch (e) {
       if (mounted) {
+        // 1. SnackBar de erro usa o tema
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Erro ao fazer logout: $e'),
-            backgroundColor: Colors.red,
+            backgroundColor: Theme.of(context).colorScheme.error,
           ),
         );
       }
     }
   }
 
+  // Widget auxiliar para os títulos de seção
+  Widget _buildSectionTitle(BuildContext context, String title) {
+    return Text(
+      title,
+      // 2. Título da seção usa o tema
+      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+        color: Theme.of(context).primaryColor,
+        fontWeight: FontWeight.bold,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      // O AppBar já é estilizado pelo tema
       appBar: AppBar(
         title: const Text('Configurações'),
       ),
@@ -57,23 +77,17 @@ class _SettingsPageState extends State<SettingsPage> {
         padding: const EdgeInsets.all(16.0),
         children: [
           // --- Seção Conta ---
-          const Text(
-            'Conta',
-            style: TextStyle(
-              color: Colors.orange,
-              fontWeight: FontWeight.bold,
-              fontSize: 16,
-            ),
-          ),
-          const Divider(),
+          _buildSectionTitle(context, 'CONTA'),
+          const Divider(height: 16, color: Colors.white24),
           ListTile(
+            // 3. O ListTile agora é totalmente controlado pelo listTileTheme
             leading: const Icon(Icons.logout),
             title: const Text('Sair (Logout)'),
             subtitle: const Text('Desconectar sua conta deste dispositivo'),
             onTap: () {
-              // Mostra um diálogo de confirmação antes de sair
               showDialog(
                 context: context,
+                // 4. O AlertDialog agora é controlado pelo dialogTheme
                 builder: (BuildContext dialogContext) {
                   return AlertDialog(
                     title: const Text('Confirmar Saída'),
@@ -83,11 +97,15 @@ class _SettingsPageState extends State<SettingsPage> {
                         child: const Text('Cancelar'),
                         onPressed: () => Navigator.of(dialogContext).pop(),
                       ),
+                      // Botão com a cor de erro do tema
                       TextButton(
-                        child: const Text('Sair', style: TextStyle(color: Colors.red)),
+                        style: TextButton.styleFrom(
+                          foregroundColor: Theme.of(context).colorScheme.error,
+                        ),
+                        child: const Text('Sair'),
                         onPressed: () {
-                          Navigator.of(dialogContext).pop(); // Fecha o diálogo
-                          _logout(); // Executa o logout
+                          Navigator.of(dialogContext).pop();
+                          _logout();
                         },
                       ),
                     ],
@@ -99,19 +117,13 @@ class _SettingsPageState extends State<SettingsPage> {
           const SizedBox(height: 30),
 
           // --- Seção Sobre ---
-          const Text(
-            'Sobre o App',
-            style: TextStyle(
-              color: Colors.orange,
-              fontWeight: FontWeight.bold,
-              fontSize: 16,
-            ),
-          ),
-          const Divider(),
+          _buildSectionTitle(context, 'SOBRE O APP'),
+          const Divider(height: 16, color: Colors.white24),
           ListTile(
             leading: const Icon(Icons.info_outline),
             title: const Text('Versão do Aplicativo'),
-            subtitle: Text(_appVersion), // Mostra a versão carregada
+            subtitle: Text(_appVersion),
+            onTap: null, // Desabilita o efeito de clique
           ),
         ],
       ),

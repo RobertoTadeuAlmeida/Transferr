@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:transferr/config/theme/app_theme.dart'; // 1. Importar o tema
 import '../models/excursion.dart';
 import '../models/enums.dart';
 import '../providers/excursion_provider.dart';
@@ -11,6 +12,7 @@ class ExcursionCard extends StatelessWidget {
   final bool showFeaturedStar;
   final bool actionsEnabled;
   final bool isInsideListTile;
+  final bool isSelected; // 2. Adicionar o parâmetro de seleção
 
   const ExcursionCard({
     super.key,
@@ -18,137 +20,119 @@ class ExcursionCard extends StatelessWidget {
     this.showFeaturedStar = true,
     this.actionsEnabled = true,
     this.isInsideListTile = false,
+    this.isSelected = false, // 3. Valor padrão
   });
 
   @override
   Widget build(BuildContext context) {
-    // Lógica para definir a cor do Chip de Status
-    final status = excursion.status;
-    final statusColor = switch (status) {
-      ExcursionStatus.agendada => Colors.blue,
-      ExcursionStatus.realizada => Colors.green,
-      ExcursionStatus.cancelada => Colors.red,
-      ExcursionStatus.confirmada => Colors.blue,
+    // 4. Usar o tema para cores e textos
+    final theme = Theme.of(context);
+    final textTheme = theme.textTheme;
+
+    // Lógica de cor e ícone para o status
+    final (Color statusColor, IconData statusIcon) = switch (excursion.status) {
+      ExcursionStatus.realizada => (AppTheme.successColor, Icons.check_circle_outline),
+      ExcursionStatus.cancelada => (theme.colorScheme.error, Icons.cancel_outlined),
+      _ => (AppTheme.infoColor, Icons.schedule),
     };
 
-    // O conteúdo do card que será reutilizado
-    final cardContent = Stack(
-      children: [
-        // A coluna com todas as informações da excursão
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
-          child: Column(
+    final cardContent = Padding(
+      // Padding interno do conteúdo, não do Card em si
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min, // Ocupa o mínimo de espaço vertical
             children: [
-              // Row superior agora só tem o título
-              Text(
-                excursion.name,
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
+              Expanded(
+                child: Text(
+                  excursion.name,
+                  style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
               ),
-              const SizedBox(height: 12),
-              // Row para Data
-              Row(
-                children: [
-                  Icon(Icons.calendar_today, size: 16, color: Colors.grey[400]),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Data: ${DateFormat('dd/MM/yyyy').format(excursion.date)}',
-                    style: TextStyle(fontSize: 14, color: Colors.grey[400]),
+              if (showFeaturedStar && actionsEnabled)
+                Padding(
+                  padding: const EdgeInsets.only(left: 8.0),
+                  child: Icon(
+                    excursion.isFeatured ? Icons.star_rounded : Icons.star_border_rounded,
+                    color: excursion.isFeatured ? Colors.amber.shade600 : Colors.grey.shade600,
+                    size: 20,
                   ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              // Row para Assentos
-              Row(
-                children: [
-                  Icon(Icons.people_outline, size: 16, color: Colors.grey[400]),
-                  const SizedBox(width: 8),
-                  Text(
-                    '${excursion.participants.length} de ${excursion.totalSeats} vagas preenchidas',
-                    style: TextStyle(fontSize: 14, color: Colors.grey[400]),
-                  ),
-                ],
-              ),
+                ),
             ],
           ),
-        ),
-
-        // Botão de "Destaque" (estrela) continua no canto superior direito
-        if (showFeaturedStar && actionsEnabled)
-          Positioned(
-            top: 0,
-            right: 0,
-            child: IconButton(
-              icon: Icon(
-                excursion.isFeatured ? Icons.star : Icons.star_border,
-                color: excursion.isFeatured ? Colors.amber : Colors.grey,
-              ),
-              tooltip: 'Marcar como destaque',
-              onPressed: () {
-                context.read<ExcursionProvider>().toggleFeaturedStatus(
-                  excursion.id!,
-                  excursion.isFeatured,
-                );
-              },
-            ),
+          const SizedBox(height: 12),
+          _buildDetailRow(
+            context,
+            icon: Icons.calendar_today_outlined,
+            text: DateFormat('dd/MM/yyyy').format(excursion.date),
           ),
-
-        // CORREÇÃO 1 e 2: O Chip de Status agora está posicionado no canto inferior direito
-        Positioned(
-          bottom: 20,
-          right: 8,
-          child: Chip(
-            label: Text(
-              status.name.toUpperCase(),
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 10,
-              ),
-            ),
-            backgroundColor: statusColor,
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 0),
-            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            visualDensity: VisualDensity.compact,
+          const SizedBox(height: 6),
+          _buildDetailRow(
+            context,
+            icon: Icons.people_alt_outlined,
+            text: '${excursion.participants.length} de ${excursion.totalSeats} vagas',
           ),
-        ),
-      ],
+          const SizedBox(height: 6),
+          _buildDetailRow(
+            context,
+            icon: statusIcon,
+            text: excursion.status.name,
+            color: statusColor,
+          ),
+        ],
+      ),
     );
 
-    // Se estiver dentro de um ListTile, não renderiza o Card/InkWell externo
+    // Se estiver dentro de um ListTile, retorna apenas o conteúdo.
+    // O ListTile pai controlará o clique.
     if (isInsideListTile) {
       return cardContent;
     }
 
-    // Comportamento original para a tela de excursões ativas
+    // Comportamento original: um Card clicável.
     return Card(
-      elevation: 2,
-      margin: const EdgeInsets.symmetric(vertical: 8.0),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.0)),
-      color: const Color(0xFF2A2A2A),
-      clipBehavior: Clip.antiAlias,
+      // A forma agora inclui a borda de seleção
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12.0),
+        side: isSelected
+            ? BorderSide(color: theme.primaryColor, width: 2.0)
+            : BorderSide.none,
+      ),
+      // O clique é desabilitado se as ações não estiverem ativas
       child: InkWell(
         onTap: actionsEnabled
-            ? () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) =>
-                  ExcursionDashboardPage(excursionId: excursion.id!),
-            ),
-          );
-        }
+            ? () => Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ExcursionDashboardPage(excursionId: excursion.id!),
+          ),
+        )
             : null,
         borderRadius: BorderRadius.circular(12.0),
         child: cardContent,
       ),
+    );
+  }
+
+  // Widget auxiliar para as linhas de detalhe, já usando o tema
+  Widget _buildDetailRow(BuildContext context, {required IconData icon, required String text, Color? color}) {
+    final textTheme = Theme.of(context).textTheme;
+    final defaultColor = textTheme.bodyMedium?.color?.withOpacity(0.7);
+
+    return Row(
+      children: [
+        Icon(icon, size: 16, color: color ?? defaultColor),
+        const SizedBox(width: 8),
+        Text(
+          text,
+          style: textTheme.bodyMedium?.copyWith(color: color ?? defaultColor),
+        ),
+      ],
     );
   }
 }
