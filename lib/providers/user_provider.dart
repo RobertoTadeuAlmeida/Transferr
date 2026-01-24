@@ -1,147 +1,119 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:transferr/providers/excursion_provider.dart';
-import '../models/client.dart';
-import '../repositories/client_repository.dart';
+import '../models/user.dart';
+import '../repositories/user_repository.dart';
 
-class ClientProvider with ChangeNotifier {
-  final ClientRepository _repository;
-  final ExcursionProvider? _excursionProvider;
-  StreamSubscription? _clientSubscription;
+class UserProvider with ChangeNotifier {
+  // Injeção do repositório
+  final UserRepository _repository = UserRepository();
 
-  List<Client> _allClients = [];
+  // Inscrição para a stream
+  StreamSubscription? _userSubscription;
+
+  // Estado Interno
+  List<User> _allUsers = [];
   bool _isLoading = true;
   String? _error;
   String _searchTerm = '';
 
-  List<Client> get clients {
-    if (_searchTerm.isEmpty) {
-      return _allClients;
-    } else {
-      return _allClients.where((client) {
-        final searchTermLower = _searchTerm.toLowerCase();
-        final nameLower = client.name.toLowerCase();
-        final cpfUnmasked = client.cpf.replaceAll(RegExp(r'\D'), '');
-        final contactUnmasked = client.contact.replaceAll(RegExp(r'\D'), '');
+  // --- GETTERS ---
 
-        return nameLower.contains(searchTermLower) ||
-            cpfUnmasked.contains(searchTermLower) ||
-            contactUnmasked.contains(searchTermLower);
-      }).toList();
-    }
+  /// Retorna a lista filtrada baseada no termo de busca
+  List<User> get users {
+    if (_searchTerm.isEmpty) return _allUsers;
+
+    final term = _searchTerm.toLowerCase();
+    return _allUsers.where((user) {
+      final nameMatches = user.name.toLowerCase().contains(term);
+      final emailMatches = user.email.toLowerCase().contains(term);
+
+      // Limpeza de CPF para busca numérica pura
+      final cpfClean = (user.document ?? '').replaceAll(RegExp(r'\D'), '');
+      final cpfMatches = cpfClean.contains(term);
+
+      return nameMatches || emailMatches || cpfMatches;
+    }).toList();
   }
 
   bool get isLoading => _isLoading;
   String? get error => _error;
-  int get filteredClientsCount => clients.length;
+  int get usersCount => users.length;
 
-  ClientProvider({
-    ClientRepository? repository,
-    ExcursionProvider? excursionProvider,
-  })  : _repository = repository ?? ClientRepository(),
-        _excursionProvider = excursionProvider {
-    _listenToClients();
+  // --- CONSTRUTOR ---
+
+  UserProvider() {
+    _initUserStream();
   }
 
-  void searchClients(String term) {
-    _searchTerm = term;
-    notifyListeners();
-  }
+  // --- MÉTODOS DE ESTADO ---
 
-  void _listenToClients() {
-    print('[ClientProvider] Iniciando escuta da stream de clientes...');
-    _clientSubscription?.cancel();
-    _clientSubscription = _repository.getClientsStream().listen(
-          (clientsList) {
-        print('[ClientProvider] Dados recebidos! Quantidade: ${clientsList.length}');
+  /// Inicia a escuta em tempo real através do repositório
+  void _initUserStream() {
+    _isLoading = true;
+    _userSubscription?.cancel();
 
-        // 1. CORREÇÃO: Chame _updateClientStatus AQUI, depois de receber a lista.
-        _updateClientStatus(clientsList);
-      },
-      onError: (error) {
-        print('[ClientProvider] ERRO CRÍTICO na stream de clientes: $error');
+    _userSubscription = _repository.getUsersStream().listen(
+          (userList) {
+        _allUsers = userList;
         _isLoading = false;
-        _error = 'Falha ao carregar clientes.';
+        _error = null;
+        notifyListeners();
+      },
+      onError: (err) {
+        _isLoading = false;
+        _error = 'Erro ao sincronizar usuários.';
         notifyListeners();
       },
     );
   }
 
-  void _updateClientStatus(List<Client> rawClientsList) {
-    // Se o provider de excursão ainda não estiver pronto, apenas carrega os clientes
-    if (_excursionProvider == null) {
-      _allClients = rawClientsList;
-      _isLoading = false;
-      notifyListeners();
-      return;
-    }
-
-    // Pega todos os IDs de passageiros de todas as excursões
-    final Set<String> allPassengerIds = {};
-    for (var excursion in _excursionProvider!.excursions) {
-      // 2. CORREÇÃO: Troque 'participants' por 'passengers' (ou o nome correto no seu modelo Excursion)
-      for (var passenger in excursion.participants) {
-        allPassengerIds.add(passenger.clientId);
-      }
-    }
-
-    // Cria a nova lista de clientes, atualizando o status de cada um
-    final List<Client> updatedClients = rawClientsList.map((client) {
-      final bool isActive = allPassengerIds.contains(client.id);
-      return client.copyWith(isActive: isActive); // Usa o copyWith
-    }).toList();
-
-    updatedClients.sort(
-          (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
-    );
-
-    _allClients = updatedClients;
-    _isLoading = false;
-    _error = null;
+  /// Atualiza o termo de busca e notifica a UI
+  void searchUsers(String term) {
+    _searchTerm = term;
     notifyListeners();
   }
 
-  // ... restante do seu código (getClientById, addClient, etc.) ...
+  // --- OPERAÇÕES (ENCAMINHAMENTO PARA REPOSITÓRIO) ---
 
-  Client? getClientById(String clientId) {
+  /// Adiciona ou atualiza um usuário completo
+  Future<void> saveUser(User user) async {
     try {
-      return _allClients.firstWhere((client) => client.id == clientId);
+      await _repository.saveUser(user);
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  /// Alterna o status ativo/inativo (Soft Delete)
+  Future<void> toggleUserStatus(String userId, bool currentStatus) async {
+    try {
+      await _repository.toggleUserStatus(userId, !currentStatus);
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  /// Atualiza apenas o cargo do usuário
+  Future<void> updateUserRole(String userId, String role) async {
+    try {
+      await _repository.updateUserRole(userId, role);
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  /// Busca um usuário na lista local (síncrono)
+  User? findLocalUserById(String userId) {
+    try {
+      return _allUsers.firstWhere((u) => u.id == userId);
     } catch (e) {
       return null;
     }
   }
 
-  Future<void> addClient(Client newClient) async {
-    try {
-      await _repository.addClient(newClient);
-    } catch (e) {
-      print('Erro ao adicionar cliente: $e');
-      rethrow;
-    }
-  }
-
-  Future<void> updateClient(Client updatedClient) async {
-    try {
-      await _repository.updateClient(updatedClient);
-    } catch (e) {
-      print('Erro ao atualizar cliente: $e');
-      rethrow;
-    }
-  }
-
-  Future<void> deleteClient(String clientId) async {
-    try {
-      await _repository.deleteClient(clientId);
-    } catch (e) {
-      print('Erro ao deletar cliente: $e');
-      rethrow;
-    }
-  }
-
   @override
   void dispose() {
-    print('[ClientProvider] Dispose chamado. Cancelando a inscrição da stream.');
-    _clientSubscription?.cancel();
+    _userSubscription?.cancel();
     super.dispose();
   }
 }

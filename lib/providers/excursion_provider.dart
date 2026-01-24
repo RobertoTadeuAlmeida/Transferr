@@ -1,378 +1,141 @@
 import 'dart:async';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:transferr/models/client.dart';
-import 'package:transferr/models/excursion.dart';
+import '../models/excursion.dart';
 import '../models/enums.dart';
-import '../models/participant.dart';
+import '../models/passenger.dart';
+import '../repositories/excursion_repository.dart';
 
 class ExcursionProvider with ChangeNotifier {
-  // --- Estado e Conexão com Firebase ---
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  late final CollectionReference _excursionsRef;
-  StreamSubscription? _excursionSubscription;
+  final ExcursionRepository _repository = ExcursionRepository();
 
-  double _totalGrossRevenue = 0.0;
-  double _totalNetRevenue = 0.0;
-  int _totalClientsConfirmed = 0;
-  int _totalAvailableSeats = 0;
-  int _totalPayments = 0;
-  int _completePayments = 0;
-  int _totalSeatsOfAllExcursions = 0;
-
-  List<Excursion> _activeExcursions = [];
-  List<Excursion> _historicalExcursions = [];
+  // --- ESTADO ---
   List<Excursion> _excursions = [];
-  bool _isLoading = true;
+  bool _isLoading = false;
+  StreamSubscription? _excursionSubscription;
+  String? _currentUid;
 
-  // --- Getters Públicos ---
+  // --- GETTERS ---
   List<Excursion> get excursions => _excursions;
-
-  List<Excursion> get activeExcursions => _activeExcursions;
-
-  List<Excursion> get historicalExcursions => _historicalExcursions;
-
-  List<Excursion> get featuredExcursions =>
-      _excursions.where((ex) => ex.isFeatured).toList();
-
   bool get isLoading => _isLoading;
 
-  double get totalGrossRevenue => _totalGrossRevenue;
+  /// Retorna apenas excursões "Programadas" ou "Em Andamento" para a Home
+  List<Excursion> get activeExcursions => _excursions
+      .where((ex) =>
+  ex.status == ExcursionStatus.programada ||
+      ex.status == ExcursionStatus.emAndamento)
+      .toList();
 
-  double get totalNetRevenue => _totalNetRevenue;
+  ExcursionProvider() ;
 
-  int get totalClientsConfirmed => _totalClientsConfirmed;
+  // --- SINCRONIZAÇÃO EM TEMPO REAL ---
 
-  int get totalAvailableSeats => _totalAvailableSeats;
+  // Adicione o parâmetro uid
+  void listenToExcursions(String? uid) {
+    if (uid == null) return; // Não tenta buscar se não estiver logado
 
-  int get totalPayments => _totalPayments;
-
-  int get completePayments => _completePayments;
-
-  int get totalSeatsOfAllExcursions => _totalSeatsOfAllExcursions;
-
-  ExcursionProvider() {
-    _excursionsRef = _firestore.collection('excursions');
-    listenToExcursions();
-  }
-
-  void listenToExcursions() {
     _isLoading = true;
+    _excursionSubscription?.cancel();
+
+    // Passamos o uid para o repositório filtrar a query
+    _excursionSubscription = _repository.getExcursionsStream(responsibleId: uid).listen(
+          (data) {
+        _excursions = data;
+        _isLoading = false;
+        notifyListeners();
+      },
+      onError: (error) {
+        debugPrint("Erro na Stream de Excursões: $error");
+        _isLoading = false;
+        notifyListeners();
+      },
+    );
+  }
+
+  // --- OPERAÇÕES DE EXCURSÃO (CRUD) ---
+
+  Future<void> addExcursion(Excursion excursion) async {
+    _setLoading(true);
+    try {
+      // O repositório usa o toMap() que já limpamos para evitar o erro de cast
+      final newExcursion = excursion.copyWith(idResponsible: _currentUid);
+      await _repository.addExcursion(excursion);
+    } catch (e) {
+      debugPrint("Erro ao adicionar excursão: $e");
+      rethrow;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  Future<void> updateExcursion(Excursion excursion) async {
+    _setLoading(true);
+    try {
+      await _repository.updateExcursion(excursion);
+    } catch (e) {
+      debugPrint("Erro ao atualizar excursão: $e");
+      rethrow;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  Future<void> deleteMultipleExcursions(List<String> ids) async {
+    _setLoading(true);
+    try {
+      await _repository.deleteMultipleExcursions(ids);
+    } catch (e) {
+      debugPrint("Erro ao deletar múltiplas: $e");
+      rethrow;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  // --- GESTÃO DE PASSAGEIROS & CHECK-IN ---
+
+  /// Retorna o Stream de passageiros (importante para a tela de lista de passageiros)
+  Stream<List<Passenger>> getPassengersStream(String excursionId) {
+    return _repository.getPassengersStream(excursionId);
+  }
+
+  Future<void> addOrUpdatePassenger(String excursionId, Passenger passenger) async {
+    try {
+      await _repository.addOrUpdatePassenger(excursionId, passenger);
+    } catch (e) {
+      debugPrint("Erro ao gerir passageiro: $e");
+      rethrow;
+    }
+  }
+
+  Future<void> registerCheckin({
+    required String excursionId,
+    required String passengerId,
+    required String status,
+    required String agenteId,
+  }) async {
+    final checkinData = {
+      'statusEmbarque': status,
+      'agenteResponsavel': agenteId,
+      'dataCheckin': DateTime.now().toIso8601String(),
+    };
+
+    try {
+      await _repository.updateCheckinStatus(
+        excursionId: excursionId,
+        passengerId: passengerId,
+        checkinData: checkinData,
+      );
+    } catch (e) {
+      debugPrint("Erro no check-in: $e");
+      rethrow;
+    }
+  }
+
+  // --- AUXILIARES ---
+
+  void _setLoading(bool value) {
+    _isLoading = value;
     notifyListeners();
-
-    _excursionSubscription?.cancel(); // Cancela ouvintes antigos
-
-    _excursionSubscription = _excursionsRef
-        .orderBy('date', descending: false)
-        .snapshots() // A mágica do tempo real!
-        .listen(
-          (QuerySnapshot snapshot) {
-            _excursions = snapshot.docs.map((doc) {
-              return Excursion.fromFirestore(
-                doc as DocumentSnapshot<Map<String, dynamic>>,
-              );
-            }).toList();
-
-            _activeExcursions = _excursions
-                .where((ex) => ex.status == ExcursionStatus.agendada)
-                .toList();
-
-            _historicalExcursions = _excursions
-                .where(
-                  (ex) =>
-                      ex.status == ExcursionStatus.confirmada ||
-                      ex.status == ExcursionStatus.cancelada,
-                )
-                .toList();
-
-            // --- FIM DA CORREÇÃO ---
-
-            // Passo 4: Executa os cálculos de totais (que já estavam corretos).
-            _calculoTotals();
-
-            // Passo 5: Atualiza o estado de loading e notifica a UI.
-            if (_isLoading) {
-              _isLoading = false;
-            }
-            notifyListeners(); // Notifica a UI sobre os novos dados e as novas listas.
-          },
-          onError: (error) {
-            print("====== ERRO NO STREAM DO FIREBASE ======");
-            print("Erro ao ouvir excursões: $error");
-            print(
-              "Verifique as Regras de Segurança do Firestore no console do Firebase!",
-            );
-            _isLoading = false;
-            notifyListeners();
-          },
-        );
-  }
-
-  void _calculoTotals() {
-    int tempTotalSeats = 0;
-    double tempGross = 0;
-    double tempNet = 0;
-    int tempClients = 0;
-    int tempTotalPayments = 0;
-    int tempCompletePayments = 0;
-    const int totalCapacity = 67; // Mova para uma constante global se preferir
-
-    // Itera sobre a lista uma única vez para calcular tudo.
-    for (final excursion in _excursions) {
-      tempTotalSeats += excursion.totalSeats;
-      tempGross += excursion.grossRevenue;
-      tempNet += excursion.netRevenue;
-      tempClients += excursion.participants.length;
-      tempTotalPayments += excursion.participants.length;
-      tempCompletePayments += excursion.participants
-          .where((p) => p.paymentStatus == PaymentStatus.paid)
-          .length;
-    }
-
-    // Atualiza as variáveis de estado
-    _totalSeatsOfAllExcursions = tempTotalSeats;
-    _totalGrossRevenue = tempGross;
-    _totalNetRevenue = tempNet;
-    _totalClientsConfirmed = tempClients;
-    _totalAvailableSeats = totalCapacity - _totalClientsConfirmed;
-    _totalPayments = tempTotalPayments;
-    _completePayments = tempCompletePayments;
-  }
-
-  // --- Funções CRUD (Create, Read, Update, Delete) ---
-
-  Future<void> addExcursion(Excursion newExcursion) async {
-    try {
-      await _excursionsRef.add(newExcursion.toMap());
-    } catch (e) {
-      print('Erro ao adicionar excursão: $e');
-      throw e;
-    }
-  }
-
-  Future<void> updateExcursion(Excursion updatedExcursion) async {
-    if (updatedExcursion.id == null) {
-      throw Exception('ID da excursão não pode ser nulo para atualização.');
-    }
-    try {
-      await _excursionsRef
-          .doc(updatedExcursion.id)
-          .update(updatedExcursion.toMap());
-    } catch (e) {
-      print('Erro ao atualizar excursão: $e');
-      throw e;
-    }
-  }
-
-  Future<void> updateExcursionStatus(
-    String excursionId,
-    ExcursionStatus newStatus,
-  ) async {
-    try {
-      final Map<String, dynamic> updateData = {
-        'status': newStatus.name,
-        // Se o novo status for 'completed' ou 'canceled', definimos 'isFeatured' como false.
-        if (newStatus == ExcursionStatus.realizada ||
-            newStatus == ExcursionStatus.cancelada)
-          'isFeatured': false,
-      };
-
-      await _firestore
-          .collection('excursions')
-          .doc(excursionId)
-          .update(updateData);
-
-      print(
-        'Excursão $excursionId atualizada para o status: ${newStatus.name} e destaque removido.',
-      );
-    } catch (error) {
-      print("Erro ao atualizar o status da excursão: $error");
-      rethrow;
-    }
-  }
-
-  Future<void> deleteExcursion(String excursionId) async {
-    try {
-      await _firestore.collection('excursions').doc(excursionId).delete();
-      print('Excursão $excursionId excluída com sucesso.');
-    } catch (error) {
-      print("Erro ao excluir excursão: $error");
-      rethrow; // Lança o erro para que a UI possa tratá-lo se necessário.
-    }
-  }
-
-  Future<void> deleteMultipleExcursions(List<String> excursionIds) async {
-    if (excursionIds.isEmpty) return;
-
-    try {
-      final batch = _firestore.batch();
-      for (final id in excursionIds) {
-        batch.delete(_firestore.collection('excursions').doc(id));
-      }
-      await batch.commit();
-      print('${excursionIds.length} excursões foram excluídas em lote.');
-    } catch (error) {
-      print("Erro ao excluir excursões em lote: $error");
-      rethrow;
-    }
-  }
-
-  Future<void> clearHistory() async {
-    try {
-      final historicalQuery = _firestore
-          .collection('excursions')
-          .where(
-            'status',
-            whereIn: [
-              ExcursionStatus.realizada.name,
-              ExcursionStatus.realizada.name,
-            ],
-          );
-
-      final snapshot = await historicalQuery.get();
-
-      final batch = _firestore.batch();
-      for (var doc in snapshot.docs) {
-        batch.delete(doc.reference);
-      }
-      await batch.commit();
-      print('${snapshot.docs.length} excursões do histórico foram excluídas.');
-    } catch (error) {
-      print("Erro ao limpar o histórico: $error");
-      rethrow;
-    }
-  }
-
-  Future<void> toggleFeaturedStatus(
-    String excursionId,
-    bool currentStatus,
-  ) async {
-    try {
-      await _firestore.collection('excursions').doc(excursionId).update({
-        'isFeatured': !currentStatus,
-      });
-    } catch (error) {
-      print("Erro ao atualizar o status de destaque: $error");
-      rethrow; // Lança o erro para que a UI possa, opcionalmente, mostrá-lo.
-    }
-  }
-
-  Future<void> addParticipantToExcursion({
-    required String excursionId,
-    required Client client, // Recebemos o objeto Client completo
-  }) async {
-    try {
-      // 1. Cria a instância de Participant com os dados corretos
-      final newParticipant = Participant(
-        clientId: client.id,
-        name: client.name,
-        // O campo 'registrationDate' é obrigatório.
-        // Usamos DateTime.now() para registrar o momento exato da adição.
-        registrationDate: DateTime.now(),
-        // Os outros campos (status, paymentStatus, amountPaid)
-        // já recebem seus valores padrão pelo construtor do modelo.
-      );
-
-      // 2. Chama o Firestore para fazer a atualização atômica
-      await _firestore.collection('excursions').doc(excursionId).update({
-        // 'participants' é o nome do array no seu documento do Firestore
-        'participants': FieldValue.arrayUnion([newParticipant.toMap()]),
-      });
-    } catch (e) {
-      print('[ExcursionProvider] Erro ao adicionar participante: $e');
-      rethrow; // Relança o erro para a UI tratar
-    }
-  }
-
-  // O método removeParticipantFromExcursion que já criamos continua correto.
-  Future<void> removeParticipantFromExcursion({
-    required String excursionId,
-    required Participant participant,
-  }) async {
-    try {
-      await _firestore.collection('excursions').doc(excursionId).update({
-        'participants': FieldValue.arrayRemove([participant.toMap()]),
-      });
-    } catch (e) {
-      print('[ExcursionProvider] Erro ao remover participante: $e');
-      rethrow;
-    }
-  }
-
-  Future<void> updateParticipantPayment({
-    required String excursionId,
-    required Participant oldParticipant, // O objeto original para ser removido
-    required PaymentStatus newStatus, // O novo status vindo do formulário
-    required double newAmount, // O novo valor vindo do formulário
-  }) async {
-    try {
-      // 1. Cria uma nova instância do participante com os dados atualizados.
-      // Mantemos os dados originais que não mudam.
-      final updatedParticipant = Participant(
-        clientId: oldParticipant.clientId,
-        name: oldParticipant.name,
-        registrationDate: oldParticipant.registrationDate,
-        status: oldParticipant.status,
-        // O status geral do participante não muda aqui
-        // Campos que foram atualizados na tela de detalhes:
-        paymentStatus: newStatus,
-        amountPaid: newAmount,
-      );
-
-      // 2. Obtém a referência do documento da excursão no Firestore.
-      final docRef = _firestore.collection('excursions').doc(excursionId);
-
-      // 3. Executa a atualização atômica.
-      await docRef.update({
-        // Remove o objeto antigo do array 'participants'
-        'participants': FieldValue.arrayRemove([oldParticipant.toMap()]),
-      });
-      await docRef.update({
-        // Adiciona o novo objeto atualizado ao array 'participants'
-        'participants': FieldValue.arrayUnion([updatedParticipant.toMap()]),
-      });
-
-      // A stream que escuta as excursões irá notificar a UI sobre a mudança.
-    } catch (e) {
-      print(
-        '[ExcursionProvider] Erro ao atualizar pagamento do participante: $e',
-      );
-      // Relança o erro para que a UI (ParticipantDetailPage) possa capturá-lo
-      // e mostrar uma SnackBar para o usuário.
-      rethrow;
-    }
-  }
-
-  // --- Métodos Utilitários ---
-
-  Color getStatusColor(ExcursionStatus status) {
-    // Seu switch de cores está perfeito
-    switch (status) {
-      case ExcursionStatus.agendada:
-        return Colors.blueAccent;
-      case ExcursionStatus.confirmada:
-        return Colors.greenAccent;
-      case ExcursionStatus.realizada:
-        return Colors.purpleAccent;
-      case ExcursionStatus.cancelada:
-        return Colors.redAccent;
-    }
-  }
-
-  Excursion? getExcursionById(String excursionId) {
-    try {
-      return _excursions.firstWhere((ex) => ex.id == excursionId);
-    } catch (e) {
-      return null;
-    }
-  }
-
-  Excursion? getExcursionByName(String id) {
-    try {
-      return _excursions.firstWhere((ex) => ex.id == id);
-    } catch (e) {
-      return null;
-    }
   }
 
   @override

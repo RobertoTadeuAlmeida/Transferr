@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:transferr/screens/signup_page.dart';
+import 'package:provider/provider.dart';
+import 'package:firebase_auth/firebase_auth.dart' hide AuthProvider;
+import '../../providers/auth_provider.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -13,8 +14,6 @@ class _LoginPageState extends State<LoginPage> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  bool _isLoading = false;
-  // Para controlar a visibilidade da senha
   bool _isPasswordObscured = true;
 
   @override
@@ -24,156 +23,138 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
-  Future<void> _signInWithEmail() async {
-    // Valida o formulário
-    if (!_formKey.currentState!.validate()) {
-      return;
-    }
+  Future<void> _handleLogin() async {
+    if (!_formKey.currentState!.validate()) return;
 
-    setState(() => _isLoading = true);
+    final authProvider = context.read<AuthProvider>();
+    final messenger = ScaffoldMessenger.of(context);
 
     try {
-      await FirebaseAuth.instance.signInWithEmailAndPassword(
-        email: _emailController.text.trim(),
-        password: _passwordController.text.trim(),
+      // 1. O Provider realiza o login
+      await authProvider.login(
+        _emailController.text.trim(),
+        _passwordController.text.trim(),
+
       );
-      // O AuthWrapper cuidará da navegação em caso de sucesso.
-    } catch (e) {
-      _handleAuthError(e);
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
+      debugPrint('Login realizado com sucesso!');
+
+      // 2. SE CHEGOU AQUI, O LOGIN FOI SUCESSO.
+      // Se você usa AuthWrapper no main.dart, ele detectará a mudança
+      // e trocará a tela sozinho. Se NÃO usa, descomente a linha abaixo:
+      // if (mounted) Navigator.pushReplacementNamed(context, '/home');
+
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+
+      // REMOVIDO: navigator.pushReplacementNamed('/home') daqui!
+
+      String message = 'Erro ao entrar.';
+      if (e.code == 'user-not-found' || e.code == 'wrong-password' || e.code == 'invalid-credential') {
+        message = 'E-mail ou senha incorretos.';
+      } else if (e.code == 'user-disabled') {
+        message = 'Esta conta foi desativada.';
+      } else if (e.code == 'too-many-requests') {
+        message = 'Muitas tentativas. Tente novamente mais tarde.';
       }
+
+      _showError(messenger, message);
+    } catch (e) {
+      if (!mounted) return;
+      _showError(messenger, 'Erro inesperado. Verifique sua conexão.');
     }
   }
 
-  void _handleAuthError(dynamic error) {
-    String errorMessage = 'Ocorreu um erro desconhecido.';
-
-    if (error is FirebaseAuthException) {
-      errorMessage = switch (error.code) {
-        'user-not-found' => 'Nenhum usuário encontrado com este e-mail.',
-        'wrong-password' => 'Senha incorreta. Por favor, tente novamente.',
-        'invalid-email' => 'O formato do e-mail fornecido é inválido.',
-        'user-disabled' => 'Esta conta de usuário foi desativada.',
-        'invalid-credential' => 'Credenciais incorretas. Verifique o e-mail e a senha.',
-        _ => 'Ocorreu um erro de autenticação. Tente mais tarde.',
-      };
-    } else {
-      errorMessage = error.toString();
-    }
-
-    if (mounted) {
-      // 1. SnackBar usa o tema para a cor de fundo e estilo
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(errorMessage),
-          backgroundColor: Theme.of(context).colorScheme.error,
-        ),
-      );
-    }
+  void _showError(ScaffoldMessengerState messenger, String message) {
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.redAccent,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final textTheme = theme.textTheme;
+    // Observa o estado de carregamento do provider
+    final isLoading = context.watch<AuthProvider>().isLoading;
 
     return Scaffold(
-      // O AppBar já é estilizado pelo tema
-      appBar: AppBar(title: const Text('Login'), centerTitle: true),
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24.0),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Os textos já estão usando o tema corretamente
-                Text(
-                  'Bem-vindo de volta!',
-                  textAlign: TextAlign.center,
-                  style: textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Acesse sua conta para continuar',
-                  textAlign: TextAlign.center,
-                  style: textTheme.bodyMedium?.copyWith(color: Colors.white70),
-                ),
-                const SizedBox(height: 40),
-
-                // 2. TextFormField agora usa 100% do inputDecorationTheme
-                TextFormField(
-                  controller: _emailController,
-                  decoration: const InputDecoration(
-                    labelText: 'E-mail',
-                    prefixIcon: Icon(Icons.email_outlined),
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 32.0),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Icon(Icons.directions_bus_filled_rounded,
+                      size: 80, color: theme.primaryColor),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Transferr',
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.headlineLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.5,
+                    ),
                   ),
-                  keyboardType: TextInputType.emailAddress,
-                  autofillHints: const [AutofillHints.email],
-                  validator: (value) {
-                    if (value == null || value.trim().isEmpty) return 'Por favor, digite seu e-mail.';
-                    if (!value.contains('@') || !value.contains('.')) return 'Digite um e-mail válido.';
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 16),
-
-                TextFormField(
-                  controller: _passwordController,
-                  obscureText: _isPasswordObscured,
-                  autofillHints: const [AutofillHints.password],
-                  decoration: InputDecoration(
-                    labelText: 'Senha',
-                    prefixIcon: const Icon(Icons.lock_outline),
-                    // Adiciona um ícone para mostrar/ocultar a senha
-                    suffixIcon: IconButton(
-                      icon: Icon(
-                        _isPasswordObscured ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                  const SizedBox(height: 48),
+                  TextFormField(
+                    controller: _emailController,
+                    keyboardType: TextInputType.emailAddress,
+                    enabled: !isLoading,
+                    decoration: const InputDecoration(
+                      labelText: 'E-mail',
+                      prefixIcon: Icon(Icons.email_outlined),
+                      border: OutlineInputBorder(),
+                    ),
+                    validator: (v) {
+                      if (v == null || v.isEmpty) return 'Informe seu e-mail';
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _passwordController,
+                    obscureText: _isPasswordObscured,
+                    enabled: !isLoading,
+                    decoration: InputDecoration(
+                      labelText: 'Senha',
+                      prefixIcon: const Icon(Icons.lock_outline),
+                      border: const OutlineInputBorder(),
+                      suffixIcon: IconButton(
+                        icon: Icon(_isPasswordObscured
+                            ? Icons.visibility_off
+                            : Icons.visibility),
+                        onPressed: () => setState(
+                                () => _isPasswordObscured = !_isPasswordObscured),
                       ),
-                      onPressed: () {
-                        setState(() {
-                          _isPasswordObscured = !_isPasswordObscured;
-                        });
-                      },
+                    ),
+                    validator: (v) => (v == null || v.length < 6)
+                        ? 'Senha curta'
+                        : null,
+                  ),
+                  const SizedBox(height: 32),
+                  SizedBox(
+                    height: 56,
+                    child: ElevatedButton(
+                      onPressed: isLoading ? null : _handleLogin,
+                      child: isLoading
+                          ? const CircularProgressIndicator(color: Colors.white)
+                          : const Text('ENTRAR'),
                     ),
                   ),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) return 'Por favor, digite sua senha.';
-                    if (value.length < 6) return 'A senha deve ter no mínimo 6 caracteres.';
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 24),
-
-                // 3. O botão de Entrar não precisa mais de estilo local
-                _isLoading
-                    ? const Center(child: CircularProgressIndicator())
-                    : ElevatedButton(
-                  onPressed: _signInWithEmail,
-                  child: const Text('Entrar'),
-                ),
-                const SizedBox(height: 24),
-
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text('Não tem uma conta?', style: textTheme.bodyMedium?.copyWith(color: Colors.white70)),
-                    // 4. O TextButton agora usa a cor primária do tema
-                    TextButton(
-                      onPressed: () {
-                        Navigator.of(context).pushReplacement(
-                          MaterialPageRoute(builder: (context) => const SignUpPage()),
-                        );
-                      },
-                      child: const Text('Cadastre-se'),
-                    ),
-                  ],
-                ),
-              ],
+                  const SizedBox(height: 24),
+                  TextButton(
+                    onPressed: isLoading ? null : () => Navigator.pushNamed(context, '/register'),
+                    child: const Text('Cadastre sua Empresa'),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

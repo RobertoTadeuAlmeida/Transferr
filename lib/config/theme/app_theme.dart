@@ -166,12 +166,27 @@ class AppTheme {
       listTileTheme: ListTileThemeData(
         iconColor: primaryColor,
         titleTextStyle: textTheme.bodyLarge,
-        subtitleTextStyle: textTheme.bodyMedium?.copyWith(color: Colors.white70),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.0)),
+        subtitleTextStyle: textTheme.bodyMedium?.copyWith(
+          color: Colors.white70,
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12.0),
+        ),
       ),
       progressIndicatorTheme: const ProgressIndicatorThemeData(
         color: primaryColor,
         circularTrackColor: Colors.white24,
+      ),
+      bottomNavigationBarTheme: BottomNavigationBarThemeData(
+        backgroundColor: scaffoldBackgroundColor,
+        selectedItemColor: primaryColor,
+        unselectedItemColor: Colors.grey[600],
+        selectedLabelStyle: textTheme.bodySmall?.copyWith(
+          fontWeight: FontWeight.bold,
+        ),
+        unselectedLabelStyle: textTheme.bodySmall,
+        type: BottomNavigationBarType.fixed,
+        elevation: 0,
       ),
     );
   }

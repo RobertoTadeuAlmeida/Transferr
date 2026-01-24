@@ -1,16 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:transferr/config/theme/app_theme.dart'; // Importe o tema para as cores de status
-import 'package:transferr/utils/double_extensions.dart';
-import 'package:transferr/widgets/financial_summary_card.dart';
-import 'package:transferr/widgets/info_card.dart';
-import 'package:transferr/widgets/metric_card.dart';
-import 'package:transferr/widgets/participants_section.dart';
-import '../../models/enums.dart';
-import '../../models/excursion.dart';
+import 'package:intl/intl.dart';
+import 'package:transferr/config/theme/app_theme.dart';
 import '../../providers/excursion_provider.dart';
-import 'add_edit_excursion_page.dart';
-import 'add_passenger_page.dart';
+import '../../providers/passenger_provider.dart';
+import '../../models/excursion.dart';
+import '../../models/passenger.dart';
+import '../../models/enums.dart';
+import '../../widgets/excursion_stats_card.dart';
+import '../passengers/passengers_list_page.dart';
+import 'add_excursion_page.dart';
 
 class ExcursionDashboardPage extends StatelessWidget {
   final String excursionId;
@@ -19,173 +18,277 @@ class ExcursionDashboardPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Acesso ao provider e ao tema
-    final excursion = context.select<ExcursionProvider, Excursion?>(
-          (p) => p.getExcursionById(excursionId),
-    );
-    final textTheme = Theme.of(context).textTheme;
+    final excursionProvider = context.watch<ExcursionProvider>();
+    final passengerProvider = context.read<PassengerProvider>();
 
-    // Tela de erro/carregamento
+    final excursion = excursionProvider.excursions
+        .cast<Excursion?>()
+        .firstWhere((e) => e?.id == excursionId, orElse: () => null);
+
     if (excursion == null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (Navigator.canPop(context)) Navigator.of(context).pop();
-      });
-      return Scaffold(
-        appBar: AppBar(title: const Text('Erro')),
-        body: Center(
-          child: Text('Excursão não encontrada...', style: textTheme.bodyLarge),
-        ),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
-
-    // Lógica de cálculo permanece a mesma
-    final int totalParticipants = excursion.participants.length;
-    final double occupiedSeatsPercentage = excursion.totalSeats > 0 ? totalParticipants / excursion.totalSeats : 0.0;
-    final double revenuePercentage = excursion.expectedRevenueFromConfirmed > 0 ? excursion.grossRevenue / excursion.expectedRevenueFromConfirmed : 0.0;
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(excursion.name),
-        actions: [_buildAppBarMenu(context, excursion)],
+        title: const Text('Painel de Viagem'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.edit_outlined),
+            onPressed: () => _navigateToEdit(context, excursion),
+          ),
+        ],
       ),
-      // O FAB já é estilizado pelo tema global
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => AddPassengerPage(excursionId: excursionId)),
-        ),
-        tooltip: 'Adicionar Participante',
-        child: const Icon(Icons.person_add),
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 80.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Widgets externos já foram (ou serão) refatorados
-            InfoCard(excursion: excursion),
-            const SizedBox(height: 20),
-            Row(
-              children: [
-                Expanded(
-                  child: MetricCard(
-                    title: 'Arrecadado',
-                    value: excursion.grossRevenue.toCurrency(),
-                    percentage: revenuePercentage,
-                    subValue: 'Esperado: ${excursion.expectedRevenueFromConfirmed.toCurrency()}',
+      body: StreamBuilder<List<Passenger>>(
+        stream: passengerProvider.watchPassengers(excursionId),
+        builder: (context, snapshot) {
+          final passengers = snapshot.data ?? [];
+          final onboardedCount = passengers
+              .where((p) => p.statusEmbarque == BoardingStatus.embarcou)
+              .length;
+
+          return ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              // --- NOVO: EXPANSION TILE PARA DETALHES ---
+              _buildInfoExpansionTile(excursion),
+
+              const SizedBox(height: 20),
+
+              ExcursionStatsCard(
+                totalSeats: excursion.totalSeats,
+                reservedSeats: passengers.length,
+                onboardedCount: onboardedCount,
+              ),
+
+              const SizedBox(height: 32),
+              const _SectionTitle(title: 'Operação'),
+
+              _MenuActionTile(
+                title: "Lista de Passageiros",
+                subtitle: "$onboardedCount de ${passengers.length} embarcados",
+                icon: Icons.people_alt_rounded,
+                color: Colors.blue,
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        PassengersListPage(excursionId: excursionId),
                   ),
                 ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: MetricCard(
-                    title: 'Assentos',
-                    value: '$totalParticipants/${excursion.totalSeats}',
-                    percentage: occupiedSeatsPercentage,
-                    subValue: '${excursion.totalSeats - totalParticipants} vagos',
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-            FinancialSummaryCard(excursion: excursion),
-            const SizedBox(height: 20),
-            ParticipantsSection(excursion: excursion),
-          ],
-        ),
+              ),
+
+              _MenuActionTile(
+                title: "Mapa de Assentos",
+                subtitle: "Visualizar ocupação física",
+                icon: Icons.grid_view_rounded,
+                color: Colors.purple,
+                onTap: () {
+                  Navigator.pushNamed(
+                    context,
+                    '/map-seats',
+                    arguments: {
+                      'excursionId': excursionId,
+                      'totalSeats': excursion.totalSeats,
+                      'title': 'Mapa de Assentos',
+                    },
+                  );
+                },
+              ),
+
+              const SizedBox(height: 16),
+              const _SectionTitle(title: 'Administrativo'),
+
+              _MenuActionTile(
+                title: "Relatório Financeiro",
+                subtitle: "Base: R\$ ${excursion.basePrice.toStringAsFixed(2)}",
+                icon: Icons.payments_outlined,
+                color: Colors.green,
+                onTap: () {},
+              ),
+            ],
+          );
+        },
       ),
     );
   }
 
-  // O PopupMenu agora usa o tema global e as cores de status
-  PopupMenuButton<String> _buildAppBarMenu(BuildContext context, Excursion excursion) {
-    final provider = context.read<ExcursionProvider>();
-    return PopupMenuButton<String>(
-      icon: const Icon(Icons.more_vert),
-      onSelected: (value) {
-        switch (value) {
-          case 'editar':
-            Navigator.push(context, MaterialPageRoute(builder: (context) => AddEditExcursionPage(excursion: excursion)));
-            break;
-          case 'concluir':
-            _showConfirmationDialog(
-              context: context,
-              title: 'Concluir Excursão?',
-              content: 'Esta ação marcará a excursão como "concluída". Você confirma?',
-              confirmColor: AppTheme.successColor, // Passando a cor do tema
-              onConfirm: () {
-                Navigator.of(context).pop();
-                provider.updateExcursionStatus(excursion.id!, ExcursionStatus.realizada);
-                Navigator.of(context).pop();
-              },
-            );
-            break;
-          case 'cancelar':
-            _showConfirmationDialog(
-              context: context,
-              title: 'Cancelar Excursão?',
-              content: 'Esta ação é irreversível e marcará a excursão como "cancelada".',
-              confirmColor: AppTheme.errorColor, // Passando a cor do tema
-              onConfirm: () {
-                Navigator.of(context).pop();
-                provider.updateExcursionStatus(excursion.id!, ExcursionStatus.cancelada);
-                Navigator.of(context).pop();
-              },
-            );
-            break;
-        }
-      },
-      itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
-        const PopupMenuItem<String>(
-          value: 'editar',
-          child: ListTile(leading: Icon(Icons.edit), title: Text('Editar')),
+  // Widget do ExpansionTile refatorado
+  Widget _buildInfoExpansionTile(Excursion excursion) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppTheme.cardColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white10),
+      ),
+      child: ExpansionTile(
+        shape: const RoundedRectangleBorder(side: BorderSide.none),
+        leading: const Icon(Icons.info_outline, color: AppTheme.primaryColor),
+        title: Text(
+          excursion.name,
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
         ),
-        const PopupMenuDivider(),
-        PopupMenuItem<String>(
-          value: 'concluir',
-          enabled: excursion.status == ExcursionStatus.agendada,
-          child: const ListTile(
-            leading: Icon(Icons.check_circle, color: AppTheme.successColor), // Cor do tema
-            title: Text('Concluir Excursão'),
+        subtitle: Text(
+          DateFormat("'Partida:' dd/MM 'às' HH:mm").format(excursion.startDate),
+          style: const TextStyle(fontSize: 12, color: Colors.grey),
+        ),
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Divider(color: Colors.white10),
+                const SizedBox(height: 8),
+                _buildDetailRow(
+                  Icons.location_on_outlined,
+                  "Destino",
+                  excursion.idMainDestination,
+                ),
+                const SizedBox(height: 8),
+                _buildDetailRow(
+                  Icons.payments_outlined,
+                  "Valor do Assento",
+                  "R\$ ${excursion.basePrice.toStringAsFixed(2)}",
+                ),
+                const SizedBox(height: 8),
+                _buildDetailRow(
+                  Icons.keyboard_return,
+                  "Retorno Previsto",
+                  DateFormat(
+                    "dd/MM/yyyy 'às' HH:mm",
+                  ).format(excursion.returnDate),
+                ),
+              ],
+            ),
           ),
-        ),
-        PopupMenuItem<String>(
-          value: 'cancelar',
-          enabled: excursion.status == ExcursionStatus.agendada,
-          child: const ListTile(
-            leading: Icon(Icons.cancel, color: AppTheme.errorColor), // Cor do tema
-            title: Text('Cancelar Excursão'),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetailRow(IconData icon, String label, String value) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 16, color: AppTheme.primaryColor),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: Colors.grey,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              Text(value, style: const TextStyle(fontSize: 14)),
+            ],
           ),
         ),
       ],
     );
   }
 
-  // O AlertDialog agora é estilizado pelo dialogTheme e recebe a cor de confirmação
-  Future<void> _showConfirmationDialog({
-    required BuildContext context,
-    required String title,
-    required String content,
-    required Color confirmColor,
-    required VoidCallback onConfirm,
-  }) {
-    return showDialog<void>(
-      context: context,
-      builder: (BuildContext dialogContext) {
-        // O AlertDialog herda seu estilo principal do dialogTheme.
-        return AlertDialog(
-          title: Text(title),
-          content: Text(content),
-          actions: <Widget>[
-            TextButton(child: const Text('Voltar'), onPressed: () => Navigator.of(dialogContext).pop()),
-            // O FilledButton herda seu estilo principal, mas a cor de fundo é customizada.
-            FilledButton(
-              style: FilledButton.styleFrom(backgroundColor: confirmColor),
-              onPressed: onConfirm,
-              child: const Text('Confirmar'),
-            ),
-          ],
-        );
-      },
+  void _navigateToEdit(BuildContext context, Excursion excursion) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => AddExcursionPage(excursion: excursion)),
+    );
+  }
+}
+
+class _SectionTitle extends StatelessWidget {
+  final String title;
+
+  const _SectionTitle({required this.title});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Text(
+        title.toUpperCase(),
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+          color: Colors.grey[500],
+          letterSpacing: 1.2,
+        ),
+      ),
+    );
+  }
+}
+
+class _MenuActionTile extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _MenuActionTile({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            // SUBSTITUIÇÃO DO withOpacity (Obsoleto) por withValues
+            color: Colors.grey[900]!.withValues(alpha: 0.5),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.white10),
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  // SUBSTITUIÇÃO DO withOpacity por withValues
+                  color: color.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, color: color, size: 24),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right, color: Colors.grey[700]),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

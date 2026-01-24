@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';import '../providers/auth_provider.dart';
-import 'login/login_page.dart';
-import 'excursions/excursions_page.dart';
+import 'package:provider/provider.dart';
+import 'package:transferr/screens/home_page.dart';
+import '../../providers/auth_provider.dart';
+import 'login_page.dart';
+import '../excursions/excursions_page.dart';
 
 class AuthWrapper extends StatelessWidget {
   const AuthWrapper({super.key});
@@ -43,7 +45,7 @@ class AuthWrapper extends StatelessWidget {
       }
 
       // Se tudo estiver OK, vai para a página inicial (Excursions ou Home)
-      return const ExcursionsPage();
+      return const HomePage();
     }
 
     // 4. NÃO AUTENTICADO

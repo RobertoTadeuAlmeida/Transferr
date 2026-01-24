@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_auth/firebase_auth.dart' hide AuthProvider;
+import 'package:provider/provider.dart';
+import 'package:transferr/providers/auth_provider.dart';
 
 class AppDrawer extends StatelessWidget {
   const AppDrawer({super.key});
@@ -45,8 +47,9 @@ class AppDrawer extends StatelessWidget {
                 const SizedBox(height: 4),
                 Text(
                   currentUser?.email ?? 'Não autenticado',
-                  style: textTheme.bodyMedium
-                      ?.copyWith(color: theme.colorScheme.onPrimary.withOpacity(0.8)),
+                  style: textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onPrimary.withOpacity(0.8),
+                  ),
                 ),
               ],
             ),
@@ -56,7 +59,7 @@ class AppDrawer extends StatelessWidget {
           ListTile(
             leading: const Icon(Icons.star_outline),
             title: const Text('Destaques'),
-            onTap: () => navigateTo('/'),
+            onTap: () => navigateTo('/home'),
           ),
           ListTile(
             leading: const Icon(Icons.tour_outlined),
@@ -66,7 +69,7 @@ class AppDrawer extends StatelessWidget {
           ListTile(
             leading: const Icon(Icons.people_alt_outlined),
             title: const Text('Passageiros'),
-            onTap: () => navigateTo('/clients'),
+            onTap: () => navigateTo('/global-passengers'),
           ),
           ListTile(
             leading: const Icon(Icons.monetization_on_outlined),
@@ -89,9 +92,48 @@ class AppDrawer extends StatelessWidget {
             leading: const Icon(Icons.logout),
             title: const Text('Sair'),
             onTap: () async {
-              // A lógica de logout permanece a mesma
-              await FirebaseAuth.instance.signOut();
-              // O AuthWrapper cuidará da navegação
+              Navigator.pop(context); // Fecha o drawer
+              showDialog(
+                context: context,
+                builder: (BuildContext context) {
+                  return AlertDialog(
+                    title: const Text('Sair da conta?'),
+                    content: const Text(
+                      'Você precisará informar seu e-mail e senha novamente para acessar.',
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context), // Cancela
+                        child: const Text('CANCELAR'),
+                      ),
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: theme.colorScheme.error,
+                          foregroundColor: theme.colorScheme.onError,
+                        ),
+                        onPressed: () async {
+                          // Fecha o diálogo
+                          Navigator.pop(context);
+
+                          // 3. Usa o AuthProvider para deslogar (mais seguro que direto no Firebase)
+
+                          try {
+                            await context.read<AuthProvider>().logout();
+                            // O AuthWrapper cuidará de levar o usuário para a LoginPage automaticamente
+                          } catch (e) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Erro ao sair da conta.'),
+                              ),
+                            );
+                          }
+                        },
+                        child: const Text('SAIR'),
+                      ),
+                    ],
+                  );
+                },
+              );
             },
           ),
         ],

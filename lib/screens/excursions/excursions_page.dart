@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:transferr/providers/excursion_provider.dart';
-import 'package:transferr/screens/excursions/add_edit_excursion_page.dart';
+import 'package:transferr/screens/excursions/add_excursion_page.dart';
 import 'package:transferr/widgets/app_drawer.dart';
-import 'package:transferr/widgets/excursion_card.dart'; // Importa o widget correto
+import 'package:transferr/widgets/excursion_card.dart';
 
 import 'excursion_dashboard_page.dart';
-import 'history_page.dart';
 
 class ExcursionsPage extends StatefulWidget {
   const ExcursionsPage({super.key});
@@ -16,159 +15,109 @@ class ExcursionsPage extends StatefulWidget {
 }
 
 class _ExcursionsPageState extends State<ExcursionsPage> {
-  // Lógica de estado para o modo de seleção
-  bool _isSelectionMode = false;
-  final Set<String> _selectedExcursionIds = {};
+  final Set<String> _selectedIds = {};
 
-  void _toggleSelection(String excursionId) {
+  void _toggleSelection(String id) {
     setState(() {
-      if (_selectedExcursionIds.contains(excursionId)) {
-        _selectedExcursionIds.remove(excursionId);
-        if (_selectedExcursionIds.isEmpty) {
-          _isSelectionMode = false;
-        }
+      if (_selectedIds.contains(id)) {
+        _selectedIds.remove(id);
       } else {
-        _selectedExcursionIds.add(excursionId);
+        _selectedIds.add(id);
       }
     });
-  }
-
-  void _exitSelectionMode() {
-    setState(() {
-      _isSelectionMode = false;
-      _selectedExcursionIds.clear();
-    });
-  }
-
-  // Mostra um diálogo de confirmação antes de excluir
-  void _onDeletePressed() {
-    showDialog(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Confirmar Exclusão'),
-        content: Text(
-            'Tem certeza que deseja excluir as ${_selectedExcursionIds.length} excursões selecionadas? Esta ação não pode ser desfeita.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.error,
-            ),
-            onPressed: () {
-              final provider = context.read<ExcursionProvider>();
-              provider.deleteMultipleExcursions(_selectedExcursionIds.toList());
-              Navigator.of(dialogContext).pop();
-              _exitSelectionMode();
-            },
-            child: const Text('Excluir'),
-          ),
-        ],
-      ),
-    );
   }
 
   @override
   Widget build(BuildContext context) {
     final excursionProvider = context.watch<ExcursionProvider>();
-    final activeExcursions = excursionProvider.activeExcursions;
-    final theme = Theme.of(context);
-    final textTheme = theme.textTheme;
+    final bool isSelectionMode = _selectedIds.isNotEmpty;
 
     return Scaffold(
-      drawer: const AppDrawer(),
+      // ADICIONADO: O Drawer agora está vinculado ao Scaffold
+      // Se estiver em modo de seleção, passamos null para esconder o menu
+      drawer: isSelectionMode ? null : const AppDrawer(),
+
       appBar: AppBar(
-        leading: _isSelectionMode
+        // Se estiver em modo de seleção, mostra um botão para cancelar a seleção
+        leading: isSelectionMode
             ? IconButton(
           icon: const Icon(Icons.close),
-          onPressed: _exitSelectionMode,
-          tooltip: 'Sair da seleção',
+          onPressed: () => setState(() => _selectedIds.clear()),
         )
-            : null,
-        title: Text(
-          _isSelectionMode
-              ? '${_selectedExcursionIds.length} selecionada(s)'
-              : 'Excursões Ativas',
-        ),
-        centerTitle: true,
+            : null, // O Flutter colocará automaticamente o ícone do Drawer aqui
+
+        title: Text(isSelectionMode ? '${_selectedIds.length} selecionados' : 'Minhas Viagens'),
         actions: [
-          if (_isSelectionMode)
+          if (isSelectionMode)
             IconButton(
-              icon: Icon(Icons.delete_forever, color: theme.colorScheme.error),
-              tooltip: 'Excluir Selecionadas',
-              onPressed: _onDeletePressed,
+              icon: const Icon(Icons.delete, color: Colors.red),
+              onPressed: () async {
+                // Confirmar exclusão
+                final confirm = await _showDeleteConfirmation(context);
+                if (confirm == true) {
+                  await excursionProvider.deleteMultipleExcursions(_selectedIds.toList());
+                  setState(() => _selectedIds.clear());
+                }
+              },
             )
           else
             IconButton(
-              icon: const Icon(Icons.history_edu_outlined),
-              tooltip: 'Histórico de Excursões',
-              onPressed: () {
-                Navigator.push(
+              icon: const Icon(Icons.add),
+              onPressed: () => Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (context) => const HistoryPage()),
-                );
-              },
+                  MaterialPageRoute(builder: (_) => const AddExcursionPage())
+              ),
             ),
         ],
       ),
-      body: excursionProvider.isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : activeExcursions.isEmpty
-          ? Center(
-        child: Text(
-          'Nenhuma excursão ativa no momento.',
-          style: textTheme.bodyLarge?.copyWith(color: Colors.white70),
-        ),
-      )
+      body: excursionProvider.excursions.isEmpty
+          ? const Center(child: Text("Nenhuma excursão encontrada."))
           : ListView.builder(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
-        itemCount: activeExcursions.length,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        itemCount: excursionProvider.excursions.length,
         itemBuilder: (context, index) {
-          final excursion = activeExcursions[index];
-          final isSelected = _selectedExcursionIds.contains(excursion.id);
+          final excursion = excursionProvider.excursions[index];
+          final isSelected = _selectedIds.contains(excursion.id);
 
-          return GestureDetector(
-            onLongPress: () {
-              setState(() {
-                _isSelectionMode = true;
-                _toggleSelection(excursion.id!);
-              });
-            },
+          return ExcursionCard(
+            excursion: excursion,
+            isSelected: isSelected,
             onTap: () {
-              if (_isSelectionMode) {
+              if (isSelectionMode) {
                 _toggleSelection(excursion.id!);
               } else {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => ExcursionDashboardPage(excursionId: excursion.id!),
+                    builder: (_) => ExcursionDashboardPage(excursionId: excursion.id!),
                   ),
                 );
               }
             },
-            // O ExcursionCard agora desenha sua própria borda
-            child: ExcursionCard(
-              excursion: excursion,
-              isSelected: isSelected, // Passa o estado de seleção
-            ),
+            onLongPress: () {
+              _toggleSelection(excursion.id!);
+            },
           );
         },
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          if (!_isSelectionMode) {
-            Navigator.of(context).push(
-              MaterialPageRoute(builder: (context) => const AddEditExcursionPage()),
-            );
-          }
-        },
-        label: const Text('Nova Excursão'),
-        icon: const Icon(Icons.add),
-        backgroundColor: _isSelectionMode ? Colors.grey.shade700 : theme.primaryColor,
+    );
+  }
+
+  // Função auxiliar para confirmação de exclusão
+  Future<bool?> _showDeleteConfirmation(BuildContext context) {
+    return showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Excluir Excursões?'),
+        content: const Text('Esta ação não pode ser desfeita.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('CANCELAR')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('EXCLUIR', style: TextStyle(color: Colors.red)),
+          ),
+        ],
       ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
     );
   }
 }

@@ -4,8 +4,8 @@ import 'package:shimmer/shimmer.dart';
 import 'package:transferr/utils/double_extensions.dart';
 import 'package:transferr/widgets/app_drawer.dart';
 
-import '../models/enums.dart';
-import '../models/excursion.dart';
+import '../../models/enums.dart';
+import '../../models/excursion.dart';
 
 class FinancePage extends StatefulWidget {
   const FinancePage({super.key});
