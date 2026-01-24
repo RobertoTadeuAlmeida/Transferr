@@ -3,7 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
 import 'package:provider/provider.dart';
 import '../../../models/client.dart';
-import '../../../providers/client_provider.dart';
+import '../../../providers/user_provider.dart';
 // Nenhum import de tema é necessário aqui, pois os estilos vêm do context.
 
 class AddEditClientPage extends StatefulWidget {

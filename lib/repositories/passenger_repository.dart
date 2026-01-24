@@ -3,7 +3,7 @@ import '../models/client.dart';
 
 class ClientRepository {
   // O nome da coleção, centralizado e seguro.
-  static const String _collectionName = 'clients';
+  static const String _collectionName = 'passengers';
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
