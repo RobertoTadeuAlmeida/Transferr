@@ -6,8 +6,7 @@ import '../../providers/excursion_provider.dart';
 import '../../providers/passenger_provider.dart';
 import '../../models/excursion.dart';
 import '../../models/passenger.dart';
-import '../../models/enums.dart';
-import '../../widgets/excursion_stats_card.dart';
+import 'widgets/excursion_stats_card.dart';
 import '../passengers/passengers_list_page.dart';
 import 'add_excursion_page.dart';
 
@@ -43,22 +42,25 @@ class ExcursionDashboardPage extends StatelessWidget {
         stream: passengerProvider.watchPassengers(excursionId),
         builder: (context, snapshot) {
           final passengers = snapshot.data ?? [];
-          final onboardedCount = passengers
-              .where((p) => p.statusEmbarque == BoardingStatus.embarcou)
+
+          // Calcula quantos já pagaram o valor total (Quitação)
+          final paidInFullCount = passengers
+              .where((p) => p.depositValue >= excursion.basePrice)
               .length;
+          final double lucro =
+              excursion.faturamentoPrevisto ;
 
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              // --- NOVO: EXPANSION TILE PARA DETALHES ---
               _buildInfoExpansionTile(excursion),
-
               const SizedBox(height: 20),
 
               ExcursionStatsCard(
                 totalSeats: excursion.totalSeats,
-                reservedSeats: passengers.length,
-                onboardedCount: onboardedCount,
+                reservedSeats: excursion.reservedSeats,
+                // Agora o card de estatísticas foca em pagamentos completos
+                paidInFullCount: paidInFullCount,
               ),
 
               const SizedBox(height: 32),
@@ -66,7 +68,9 @@ class ExcursionDashboardPage extends StatelessWidget {
 
               _MenuActionTile(
                 title: "Lista de Passageiros",
-                subtitle: "$onboardedCount de ${passengers.length} embarcados",
+                // Subtítulo atualizado para mostrar a saúde financeira da viagem
+                subtitle:
+                    "$paidInFullCount de ${passengers.length} passagens quitadas",
                 icon: Icons.people_alt_rounded,
                 color: Colors.blue,
                 onTap: () => Navigator.push(
@@ -96,15 +100,38 @@ class ExcursionDashboardPage extends StatelessWidget {
                 },
               ),
 
+              _MenuActionTile(
+                title: "Check-in de Operações",
+                subtitle: "Confirmação de embarque e desembarque",
+                icon: Icons.fact_check_outlined,
+                color: AppTheme.successColor,
+                onTap: () {
+                  Navigator.pushNamed(
+                    context,
+                    '/check-in',
+                    arguments: {
+                      'excursionId': excursionId,
+                      'destinationName': excursion.idMainDestination,
+                    },
+                  );
+                },
+              ),
+
               const SizedBox(height: 16),
               const _SectionTitle(title: 'Administrativo'),
 
               _MenuActionTile(
                 title: "Relatório Financeiro",
-                subtitle: "Base: R\$ ${excursion.basePrice.toStringAsFixed(2)}",
+                subtitle: "Lucro: R\$ ${lucro.toStringAsFixed(2)}",
                 icon: Icons.payments_outlined,
-                color: Colors.green,
-                onTap: () {},
+                color: lucro >= 0 ? Colors.green : Colors.red,
+                onTap: () {
+                  Navigator.pushNamed(
+                    context,
+                    '/excursion-finance',
+                    arguments: excursion,
+                  );
+                },
               ),
             ],
           );

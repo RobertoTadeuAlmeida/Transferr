@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:transferr/providers/excursion_provider.dart';
-import 'package:transferr/widgets/excursion_card.dart';
+import 'package:transferr/screens/excursions/widgets/excursion_card.dart';
 import '../../models/enums.dart';
 import 'excursion_dashboard_page.dart';
 
@@ -87,14 +87,14 @@ class _HistoryPageState extends State<HistoryPage> {
                   isSelected: isSelected,
                   onTap: () {
                     if (isSelectionMode) {
-                      _toggleSelection(excursion.id!);
+                      _toggleSelection(excursion.id);
                     } else {
                       // Navega para o dashboard em modo de visualização
                       Navigator.push(
                         context,
                         MaterialPageRoute(
                           builder: (_) => ExcursionDashboardPage(
-                            excursionId: excursion.id!,
+                            excursionId: excursion.id,
                           ),
                         ),
                       );

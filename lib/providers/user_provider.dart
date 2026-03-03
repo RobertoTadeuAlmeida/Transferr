@@ -1,13 +1,13 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../models/user.dart';
-import '../repositories/user_repository.dart';
+import '../repositories/user_repository.dart'; // Agora aponta para o unificado
 
 class UserProvider with ChangeNotifier {
-  // Injeção do repositório
-  final UserRepository _repository = UserRepository();
+  // Injeção do repositório unificado
+  final UserRepository _repository;
 
-  // Inscrição para a stream
+  // Inscrição para a stream (Real-time)
   StreamSubscription? _userSubscription;
 
   // Estado Interno
@@ -15,6 +15,13 @@ class UserProvider with ChangeNotifier {
   bool _isLoading = true;
   String? _error;
   String _searchTerm = '';
+
+  // --- CONSTRUTOR ---
+  // Permitimos passar o repositório para facilitar testes unitários no futuro
+  UserProvider({UserRepository? repository})
+      : _repository = repository ?? UserRepository() {
+    _initUserStream();
+  }
 
   // --- GETTERS ---
 
@@ -27,11 +34,11 @@ class UserProvider with ChangeNotifier {
       final nameMatches = user.name.toLowerCase().contains(term);
       final emailMatches = user.email.toLowerCase().contains(term);
 
-      // Limpeza de CPF para busca numérica pura
-      final cpfClean = (user.document ?? '').replaceAll(RegExp(r'\D'), '');
-      final cpfMatches = cpfClean.contains(term);
+      // Busca pelo documento (CPF) removendo pontuação
+      final docClean = user.document.replaceAll(RegExp(r'\D'), '');
+      final docMatches = docClean.contains(term);
 
-      return nameMatches || emailMatches || cpfMatches;
+      return nameMatches || emailMatches || docMatches;
     }).toList();
   }
 
@@ -39,15 +46,9 @@ class UserProvider with ChangeNotifier {
   String? get error => _error;
   int get usersCount => users.length;
 
-  // --- CONSTRUTOR ---
-
-  UserProvider() {
-    _initUserStream();
-  }
-
   // --- MÉTODOS DE ESTADO ---
 
-  /// Inicia a escuta em tempo real através do repositório
+  /// Inicia a escuta em tempo real dos usuários do sistema
   void _initUserStream() {
     _isLoading = true;
     _userSubscription?.cancel();
@@ -61,48 +62,43 @@ class UserProvider with ChangeNotifier {
       },
       onError: (err) {
         _isLoading = false;
-        _error = 'Erro ao sincronizar usuários.';
+        _error = 'Erro ao sincronizar lista de usuários.';
         notifyListeners();
       },
     );
   }
 
-  /// Atualiza o termo de busca e notifica a UI
+  /// Atualiza o termo de busca (usado no campo de pesquisa da UI)
   void searchUsers(String term) {
-    _searchTerm = term;
+    _searchTerm = term.trim();
     notifyListeners();
   }
 
-  // --- OPERAÇÕES (ENCAMINHAMENTO PARA REPOSITÓRIO) ---
+  // --- OPERAÇÕES ---
 
-  /// Adiciona ou atualiza um usuário completo
+  /// Salva ou atualiza um usuário (usando o método unificado saveUserData)
   Future<void> saveUser(User user) async {
     try {
-      await _repository.saveUser(user);
+      await _repository.saveUserData(user);
     } catch (e) {
+      _error = 'Erro ao salvar usuário.';
+      notifyListeners();
       rethrow;
     }
   }
 
-  /// Alterna o status ativo/inativo (Soft Delete)
+  /// Ativa/Desativa o usuário (Soft Delete)
   Future<void> toggleUserStatus(String userId, bool currentStatus) async {
     try {
       await _repository.toggleUserStatus(userId, !currentStatus);
     } catch (e) {
+      _error = 'Erro ao alterar status.';
+      notifyListeners();
       rethrow;
     }
   }
 
-  /// Atualiza apenas o cargo do usuário
-  Future<void> updateUserRole(String userId, String role) async {
-    try {
-      await _repository.updateUserRole(userId, role);
-    } catch (e) {
-      rethrow;
-    }
-  }
-
-  /// Busca um usuário na lista local (síncrono)
+  /// Busca um usuário na lista que já está na memória
   User? findLocalUserById(String userId) {
     try {
       return _allUsers.firstWhere((u) => u.id == userId);

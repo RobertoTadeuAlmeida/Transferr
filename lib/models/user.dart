@@ -49,6 +49,7 @@ class User {
 
   // Helper to check permissions
   bool get isAdmin => profile.toUpperCase() == 'ADMIN';
+  bool get isAgente => profile.toUpperCase() == 'AGENTE';
 
   // Converts User object to Firestore Map (Portuguese Keys)
   Map<String, dynamic> toMap() {
@@ -58,7 +59,6 @@ class User {
       'email': email,
       'telefone': phone,
       'documento': document,
-      // 'senha': password, // REMOVIDO POR SEGURANÇA: Não salvar senhas no Firestore
       'dataNascimento': Timestamp.fromDate(birthDate),
       'perfil': profile.toUpperCase(),
       'isActive': isActive,
@@ -74,35 +74,38 @@ class User {
     };
   }
 
-  // Factory to create User from Firestore (Portuguese Keys)
+  // NOVO: Factory para criar User a partir de um Map (usado pelos Repositories)
+  factory User.fromMap(String id, Map<String, dynamic> map) {
+    return User(
+      id: id,
+      company: map['empresa'] ?? '',
+      name: map['nome'] ?? '',
+      email: map['email'] ?? '',
+      phone: map['telefone'] ?? '',
+      document: map['documento'] ?? '',
+      password: '', // Senha nunca é trafegada via Map/Banco
+      birthDate: (map['dataNascimento'] as Timestamp? ?? Timestamp.now()).toDate(),
+      profile: map['perfil'] ?? 'AGENTE',
+      isActive: map['isActive'] ?? true,
+      zipCode: map['cep'] ?? '',
+      address: map['endereco'] ?? '',
+      number: map['numero'] ?? '',
+      neighborhood: map['bairro'] ?? '',
+      city: map['cidade'] ?? '',
+      state: map['estado'] ?? '',
+      createdAt: (map['criadoEm'] as Timestamp? ?? Timestamp.now()).toDate(),
+      updatedAt: (map['atualizadoEm'] as Timestamp?)?.toDate(),
+      deletedAt: (map['deletadoEm'] as Timestamp?)?.toDate(),
+    );
+  }
+
+  // Factory simplificada que reutiliza o fromMap
   factory User.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data();
-
     if (data == null) {
       throw StateError('User data for ${doc.id} not found!');
     }
-
-    return User(
-      id: doc.id,
-      company: data['empresa'] ?? '',
-      name: data['nome'] ?? '',
-      email: data['email'] ?? '',
-      phone: data['telefone'] ?? '',
-      document: data['documento'] ?? '',
-      password: '', // A senha nunca é lida do banco
-      birthDate: (data['dataNascimento'] as Timestamp? ?? Timestamp.now()).toDate(),
-      profile: data['perfil'] ?? 'AGENTE',
-      isActive: data['isActive'] ?? true,
-      zipCode: data['cep'] ?? '',
-      address: data['endereco'] ?? '',
-      number: data['numero'] ?? '',
-      neighborhood: data['bairro'] ?? '',
-      city: data['cidade'] ?? '',
-      state: data['estado'] ?? '',
-      createdAt: (data['criadoEm'] as Timestamp? ?? Timestamp.now()).toDate(),
-      updatedAt: (data['atualizadoEm'] as Timestamp?)?.toDate(),
-      deletedAt: (data['deletadoEm'] as Timestamp?)?.toDate(),
-    );
+    return User.fromMap(doc.id, data);
   }
 
   User copyWith({

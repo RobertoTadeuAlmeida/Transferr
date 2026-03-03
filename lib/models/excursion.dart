@@ -2,22 +2,24 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'enums.dart';
 
 class Excursion {
-  final String? id;final String name;
+  final String id;
+  final String name;
   final String description;
   final String idMainDestination;
-  final DateTime startDate; // dataPartida
-  final DateTime returnDate; // dataRetorno
-  final double basePrice; // precoBase
-  final int totalSeats; // assentosTotais
-  final int reservedSeats; // assentosReservados
+  final DateTime startDate;
+  final DateTime returnDate;
+  final double basePrice;
+  final int totalSeats;
+  final int reservedSeats;
+  final int paidSeats;
   final String slug;
   final ExcursionStatus status;
-  final String idResponsible; // idResponsavel (Admin/Dono)
+  final String idResponsible;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
   Excursion({
-    this.id,
+    required this.id,
     required this.name,
     this.description = '',
     required this.idMainDestination,
@@ -26,6 +28,7 @@ class Excursion {
     required this.basePrice,
     required this.totalSeats,
     this.reservedSeats = 0,
+    this.paidSeats = 0,
     required this.slug,
     this.status = ExcursionStatus.emAndamento,
     required this.idResponsible,
@@ -33,13 +36,45 @@ class Excursion {
     this.updatedAt,
   });
 
-  // ----------- GETTERS LOGICOS -----------
+  // ===========================================================================
+  // ----------- LÓGICA DE NEGÓCIO (CÁLCULOS LOCAIS / DDD) -----------
+  // ===========================================================================
 
-  int get availableSeats => totalSeats - reservedSeats;
 
-  bool get isFull => availableSeats <= 0;
+  /// Verifica se a excursão já atingiu o limite de vagas
+  bool get isFull => reservedSeats > totalSeats;
 
-  // ----------- CONVERSÃO FIRESTORE -----------
+  /// FATURAMENTO MÁXIMO POSSÍVEL:
+  /// O valor total que a empresa ganharia se vendesse 100% dos assentos.
+  double get faturamentoPrevisto => totalSeats * basePrice;
+
+  /// FATURAMENTO ESTIMADO ATUAL:
+  /// Baseado apenas no número de reservas (sem considerar pagamentos parciais).
+  double get faturamentoEstimadoAtual => reservedSeats * basePrice;
+
+  /// CUSTO UNITÁRIO POR ASSENTO:
+  /// Pega o total de gastos (Ônibus, etc) e divide pela capacidade total.
+  /// Ajuda a definir se o precoBase está cobrindo os custos.
+  double calcularCustoPorAssento(double totalDespesas) {
+    if (totalSeats <= 0) return 0.0;
+    return totalDespesas / totalSeats;
+  }
+
+  /// LUCRO LÍQUIDO PREVISTO (FINAL):
+  /// Quanto sobrará no bolso se todos os assentos forem vendidos.
+  double calcularLucroPrevisto(double totalDespesas) {
+    return faturamentoPrevisto - totalDespesas;
+  }
+
+  /// LUCRO REALIZADO ATUAL (FLUXO DE CAIXA):
+  /// Dinheiro que de fato entrou dos passageiros menos as despesas cadastradas.
+  double calcularLucroAtual(double faturamentoReal, double totalDespesas) {
+    return faturamentoReal - totalDespesas;
+  }
+
+  // ===========================================================================
+  // ----------- CONVERSÃO E PERSISTÊNCIA (FIRESTORE) -----------
+  // ===========================================================================
 
   Map<String, dynamic> toMap() {
     return {
@@ -52,18 +87,16 @@ class Excursion {
       'assentosTotais': totalSeats,
       'assentosReservados': reservedSeats,
       'slug': slug,
-      'status': status.name.toUpperCase(), // Salva como 'EM_ANDAMENTO'
+      'status': status.name.toUpperCase(),
       'idResponsavel': idResponsible,
       'criadoEm': createdAt ?? FieldValue.serverTimestamp(),
       'atualizadoEm': FieldValue.serverTimestamp(),
     };
   }
 
-  factory Excursion.fromFirestore(DocumentSnapshot doc) {
-    Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
-
+  factory Excursion.fromMap(String id, Map<String, dynamic> data) {
     return Excursion(
-      id: doc.id,
+      id: id,
       name: data['nome'] ?? '',
       description: data['descricao'] ?? '',
       idMainDestination: data['idDestinoPrincipal'] ?? '',
@@ -72,6 +105,7 @@ class Excursion {
       basePrice: (data['precoBase'] as num?)?.toDouble() ?? 0.0,
       totalSeats: data['assentosTotais'] as int? ?? 0,
       reservedSeats: data['assentosReservados'] as int? ?? 0,
+      paidSeats: data['assentosPagos'] as int? ?? 0,
       slug: data['slug'] ?? '',
       idResponsible: data['idResponsavel'] ?? '',
       status: _parseStatus(data['status']),
@@ -103,6 +137,7 @@ class Excursion {
     double? basePrice,
     int? totalSeats,
     int? reservedSeats,
+    int? paidSeats,
     String? slug,
     ExcursionStatus? status,
     String? idResponsible,
@@ -117,6 +152,7 @@ class Excursion {
       basePrice: basePrice ?? this.basePrice,
       totalSeats: totalSeats ?? this.totalSeats,
       reservedSeats: reservedSeats ?? this.reservedSeats,
+      paidSeats: paidSeats ?? this.paidSeats,
       slug: slug ?? this.slug,
       status: status ?? this.status,
       idResponsible: idResponsible ?? this.idResponsible,

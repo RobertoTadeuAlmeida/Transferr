@@ -4,28 +4,31 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:transferr/firebase_options.dart';
 
 // Providers
-import 'package:transferr/providers/registration_provider.dart';
 import 'package:transferr/providers/user_provider.dart';
 import 'package:transferr/providers/excursion_provider.dart';
 import 'package:transferr/providers/auth_provider.dart';
 import 'package:transferr/providers/passenger_provider.dart';
-import 'package:transferr/screens/excursions/excursion_seat_map_page.dart';
+import 'package:transferr/screens/finance/excursion_finance_page.dart';
 
 // Screens
-import 'package:transferr/screens/login/registration_page.dart';
+import 'package:transferr/screens/register/registration_page.dart';
 import 'package:transferr/screens/login/auth_wrapper.dart';
 import 'package:transferr/screens/home_page.dart';
 import 'package:transferr/screens/excursions/excursions_page.dart';
 import 'package:transferr/screens/excursions/excursion_dashboard_page.dart';
 import 'package:transferr/screens/excursions/add_excursion_page.dart';
+import 'package:transferr/screens/excursions/excursion_seat_map_page.dart';
+import 'package:transferr/screens/excursions/checkin_page.dart';
 import 'package:transferr/screens/passengers/add_passenger_page.dart';
 import 'package:transferr/screens/passengers/global_passengers_page.dart';
 import 'package:transferr/screens/passengers/passengers_list_page.dart';
+import 'package:transferr/screens/passengers/passenger_details_page.dart'; // Importado
 import 'package:transferr/screens/settings/settings_page.dart';
 import 'package:transferr/screens/finance/finance_page.dart';
 import 'package:transferr/screens/users/users_list_page.dart';
 
 import 'config/theme/app_theme.dart';
+import 'models/excursion.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -35,7 +38,6 @@ void main() async {
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => AuthProvider()),
-        ChangeNotifierProvider(create: (_) => RegistrationProvider()),
         ChangeNotifierProvider(create: (_) => ExcursionProvider()),
         ChangeNotifierProvider(create: (_) => UserProvider()),
         ChangeNotifierProvider(create: (_) => PassengerProvider()),
@@ -54,8 +56,6 @@ class MyApp extends StatelessWidget {
       title: 'Transferr',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.darkTheme,
-
-      // O AuthWrapper gerencia o estado da sessão (Login ou Home)
       initialRoute: '/',
 
       routes: {
@@ -70,7 +70,6 @@ class MyApp extends StatelessWidget {
         '/excursions': (context) => const ExcursionsPage(),
         '/add-excursion': (context) => const AddExcursionPage(),
 
-        // Rota do Dashboard (Usada pelo ExcursionCard)
         '/excursion-dashboard': (context) {
           final args = ModalRoute.of(context)?.settings.arguments;
           if (args is String) {
@@ -78,27 +77,42 @@ class MyApp extends StatelessWidget {
           }
           return _errorPage("ID da excursão não encontrado para o Dashboard");
         },
-        // --- Rota do Mapa de Assentos ---
+
         '/map-seats': (context) {
           final args = ModalRoute.of(context)?.settings.arguments;
-
           if (args is Map<String, dynamic>) {
             return ExcursionSeatMapPage(
               excursionId: args['excursionId'],
               totalSeats: args['totalSeats'] ?? 44,
             );
           } else if (args is String) {
-            // Caso passe apenas o ID como String
             return ExcursionSeatMapPage(excursionId: args);
           }
-
           return _errorPage(
             "ID da excursão não informado para o mapa de assentos",
           );
         },
 
+        '/check-in': (context) {
+          final args = ModalRoute.of(context)?.settings.arguments;
+          if (args is Map<String, dynamic>) {
+            return CheckInPage(
+              excursionId: args['excursionId'],
+              destinationName:
+                  args['destinationName'] ?? 'Destino não informado',
+            );
+          }
+          return _errorPage("Dados da excursão incompletos para o Check-in");
+        },
+
         // --- Fluxo de Passageiros ---
-        '/global-passengers': (context) => const GlobalPassengersPage(),
+        '/global-passengers': (context) {
+          final args = ModalRoute.of(context)?.settings.arguments;
+          if (args is Map<String, dynamic>) {
+            return GlobalPassengersPage(excursionId: args['excursionId']);
+          }
+          return const GlobalPassengersPage();
+        },
 
         '/passengers-list': (context) {
           final args = ModalRoute.of(context)?.settings.arguments;
@@ -110,11 +124,42 @@ class MyApp extends StatelessWidget {
 
         '/add-passenger': (context) {
           final args = ModalRoute.of(context)?.settings.arguments;
+          if (args is Map<String, dynamic>) {
+            return AddPassengerPage(
+              excursionId: args['excursionId'],
+              excursionPrice: args['excursionPrice'],
+              passenger: args['passenger'],
+            );
+          }
           if (args is String) {
             return AddPassengerPage(excursionId: args);
           }
           return _errorPage(
-            "ID da excursão não informado para novo passageiro",
+            "Parâmetros insuficientes para adicionar passageiro",
+          );
+        },
+
+        '/passenger-details': (context) {
+          final args = ModalRoute.of(context)?.settings.arguments;
+          if (args is Map<String, dynamic>) {
+            return PassengerDetailsPage(
+              passenger: args['passenger'],
+              excursionId: args['excursionId'],
+            );
+          }
+          return _errorPage(
+            "Dados do passageiro não encontrados para detalhes",
+          );
+        },
+
+        // --- Financeiro da excursão --- //
+        '/excursion-finance': (context) {
+          final args = ModalRoute.of(context)?.settings.arguments;
+          if (args is Excursion) {
+            return ExcursionFinancePage(excursion: args);
+          }
+          return _errorPage(
+            "Dados da excursão não encontrados para a planilha financeira",
           );
         },
 
@@ -124,13 +169,11 @@ class MyApp extends StatelessWidget {
         '/settings': (context) => const SettingsPage(),
       },
 
-      // Fallback para rotas inexistentes
       onUnknownRoute: (settings) =>
           MaterialPageRoute(builder: (context) => const AuthWrapper()),
     );
   }
 
-  // Widget de Erro Amigável para falhas de navegação
   Widget _errorPage(String message) {
     return Scaffold(
       appBar: AppBar(title: const Text("Erro de Navegação")),

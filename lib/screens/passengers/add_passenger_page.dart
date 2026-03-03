@@ -1,19 +1,22 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
-import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
 import 'package:provider/provider.dart';
+import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
 import 'package:uuid/uuid.dart';
-import '../../../models/passenger.dart';
-import '../../../models/enums.dart';
-import '../../../providers/passenger_provider.dart';
+import '../../models/passenger.dart';
+import '../../models/enums.dart';
+import '../../providers/passenger_provider.dart';
+import '../../config/theme/app_theme.dart';
+import 'package:currency_text_input_formatter/currency_text_input_formatter.dart';
 
 class AddPassengerPage extends StatefulWidget {
   final String excursionId;
+  final double? excursionPrice; // Preço total da viagem para validação
   final Passenger? passenger;
 
   const AddPassengerPage({
     super.key,
     required this.excursionId,
+    this.excursionPrice,
     this.passenger,
   });
 
@@ -24,15 +27,13 @@ class AddPassengerPage extends StatefulWidget {
 class _AddPassengerPageState extends State<AddPassengerPage> {
   final _formKey = GlobalKey<FormState>();
 
-  // Controllers Viajante
   late final TextEditingController _nameController;
   late final TextEditingController _phoneController;
   late final TextEditingController _docController;
   late final TextEditingController _seatController;
-  late final TextEditingController _depositController; // Controller do Sinal
+  late final TextEditingController _depositController;
   DateTime? _selectedBirthDate;
 
-  // Controllers Responsável
   late final TextEditingController _guardianNameController;
   late final TextEditingController _guardianDocController;
   late final TextEditingController _guardianPhoneController;
@@ -49,6 +50,13 @@ class _AddPassengerPageState extends State<AddPassengerPage> {
     filter: {"#": RegExp(r'[0-9]')},
   );
 
+  final CurrencyTextInputFormatter _currencyFormatter =
+      CurrencyTextInputFormatter.currency(
+        locale: 'pt_BR',
+        symbol: 'R\$',
+        decimalDigits: 2,
+      );
+
   @override
   void initState() {
     super.initState();
@@ -59,63 +67,91 @@ class _AddPassengerPageState extends State<AddPassengerPage> {
     _seatController = TextEditingController(text: p?.seatNumber ?? '');
     _selectedBirthDate = p?.birthDate;
 
-    // Inicialização segura do valor do sinal
-    _depositController = TextEditingController(
-      text: (p?.depositValue != null && p!.depositValue > 0)
-          ? p.depositValue.toStringAsFixed(2)
-          : '',
+    String initialDepositText = '';
+    if (p?.depositValue != null && p!.depositValue > 0) {
+      initialDepositText = _currencyFormatter.formatDouble(p.depositValue);
+    }
+    _depositController = TextEditingController(text: initialDepositText);
+
+    _guardianNameController = TextEditingController(
+      text: p?.guardian?.name ?? '',
+    );
+    _guardianDocController = TextEditingController(
+      text: p?.guardian?.document ?? '',
+    );
+    _guardianPhoneController = TextEditingController(
+      text: p?.guardian?.phone ?? '',
     );
 
-    _guardianNameController = TextEditingController(text: p?.guardian?.name ?? '');
-    _guardianDocController = TextEditingController(text: p?.guardian?.document ?? '');
-    _guardianPhoneController = TextEditingController(text: p?.guardian?.phone ?? '');
+    if (_selectedBirthDate != null) _calculateAge(_selectedBirthDate!);
+  }
 
-    if (_selectedBirthDate != null) {
-      _calculateAge(_selectedBirthDate!);
-    }
+  bool _isValidCPF(String cpf) {
+    if (cpf.length != 11 || RegExp(r'^(\d)\1{10}$').hasMatch(cpf)) return false;List<int> numbers = cpf.split('').map(int.parse).toList();
+
+    // Cálculo do primeiro dígito verificador
+    int sum = 0;
+    for (int i = 0; i < 9; i++) sum += numbers[i] * (10 - i);
+    int res = sum % 11;
+    int digit1 = res < 2 ? 0 : 11 - res;
+    if (numbers[9] != digit1) return false;
+
+    // Cálculo do segundo dígito verificador
+    sum = 0;
+    for (int i = 0; i < 10; i++) sum += numbers[i] * (11 - i);
+    res = sum % 11;
+    int digit2 = res < 2 ? 0 : 11 - res;
+    if (numbers[10] != digit2) return false;
+
+    return true;
   }
 
   void _calculateAge(DateTime birthDate) {
     final today = DateTime.now();
     int age = today.year - birthDate.year;
     if (today.month < birthDate.month ||
-        (today.month == birthDate.month && today.day < birthDate.day)) {
+        (today.month == birthDate.month && today.day < birthDate.day))
       age--;
-    }
     setState(() => _isMinor = age < 18);
-  }
-
-  Future<void> _selectBirthDate(BuildContext context) async {
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: _selectedBirthDate ?? DateTime(2000),
-      firstDate: DateTime(1900),
-      lastDate: DateTime.now(),
-    );
-    if (picked != null) {
-      setState(() => _selectedBirthDate = picked);
-      _calculateAge(picked);
-    }
   }
 
   Future<void> _submitForm() async {
     if (!_formKey.currentState!.validate()) return;
 
-    if (_selectedBirthDate == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Por favor, informe a data de nascimento')),
-      );
-      return;
+    final isExcursionFlow = widget.excursionId.isNotEmpty;
+    final double deposit = _currencyFormatter.getUnformattedValue().toDouble();
+
+    if (isExcursionFlow && widget.excursionPrice != null) {
+      if (deposit > widget.excursionPrice!) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.warning_amber_rounded, color: Colors.white),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'O valor (R\$ ${deposit.toStringAsFixed(2)}) excede o preço da excursão (R\$ ${widget.excursionPrice!.toStringAsFixed(2)}).',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: AppTheme.errorColor,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
     }
 
-    // Regra de Negócio: Sinal obrigatório para vincular à excursão
-    final double deposit = double.tryParse(_depositController.text.replaceAll(',', '.')) ?? 0.0;
-
-    if (deposit <= 0) {
+    if (isExcursionFlow && deposit <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('❌ O pagamento do sinal é obrigatório para cadastrar na viagem.'),
-          backgroundColor: Colors.orange,
+          content: Text(
+            'É necessário informar o valor pago (mesmo que seja R\$ 0,01).',
+          ),
+          backgroundColor: AppTheme.errorColor,
         ),
       );
       return;
@@ -130,22 +166,23 @@ class _AddPassengerPageState extends State<AddPassengerPage> {
         name: _nameController.text.trim(),
         phone: _phoneController.text,
         document: _docController.text,
-        birthDate: _selectedBirthDate!,
+        birthDate: _selectedBirthDate ?? DateTime.now(),
         seatNumber: _seatController.text.toUpperCase().trim(),
         depositValue: deposit,
         isMinor: _isMinor,
-        statusEmbarque: widget.passenger?.statusEmbarque ?? BoardingStatus.aguardando,
+        statusEmbarque:
+            widget.passenger?.statusEmbarque ?? BoardingStatus.aguardando,
         guardian: _isMinor
             ? Guardian(
-          name: _guardianNameController.text.trim(),
-          document: _guardianDocController.text,
-          phone: _guardianPhoneController.text,
-        )
+                name: _guardianNameController.text.trim(),
+                document: _guardianDocController.text,
+                phone: _guardianPhoneController.text,
+              )
             : null,
       );
 
-      final provider = context.read<PassengerProvider>();
-      final success = await provider.savePassenger(
+      final success = await context.read<PassengerProvider>().savePassenger(
+        context: context,
         passenger: passenger,
         excursionId: widget.excursionId,
         depositValue: deposit,
@@ -153,25 +190,6 @@ class _AddPassengerPageState extends State<AddPassengerPage> {
 
       if (success && mounted) {
         Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(widget.passenger == null ? '✅ Passageiro adicionado!' : '✅ Dados atualizados!'),
-            backgroundColor: Colors.green[800],
-          ),
-        );
-      } else if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('❌ ${provider.errorMessage ?? "Erro ao salvar"}'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('❌ Erro inesperado: $e'), backgroundColor: Colors.red),
-        );
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -180,180 +198,290 @@ class _AddPassengerPageState extends State<AddPassengerPage> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isExcursionFlow = widget.excursionId.isNotEmpty;
+
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.passenger == null ? 'Adicionar Passageiro' : 'Editar Passageiro'),
-        centerTitle: true,
+        title: Text(
+          widget.passenger == null ? 'Novo Cadastro' : 'Editar Dados',
+        ),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : Form(
-        key: _formKey,
-        child: ListView(
-          padding: const EdgeInsets.all(20),
-          children: [
-            _buildSectionHeader(Icons.person, 'Dados do Passageiro'),
-            TextFormField(
-              controller: _nameController,
-              decoration: const InputDecoration(labelText: 'Nome Completo'),
-              textCapitalization: TextCapitalization.words,
-              validator: (v) => v!.isEmpty ? 'Campo obrigatório' : null,
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  flex: 2,
-                  child: TextFormField(
-                    controller: _docController,
-                    inputFormatters: [_docMask],
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'Documento (RG/CPF)'),
-                    validator: (v) => v!.isEmpty ? 'Obrigatório' : null,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: TextFormField(
-                    controller: _seatController,
-                    decoration: const InputDecoration(labelText: 'Poltrona', hintText: '12A'),
-                    textCapitalization: TextCapitalization.characters,
-                    validator: (v) => v!.isEmpty ? 'Obrigatório' : null,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _phoneController,
-              inputFormatters: [_phoneMask],
-              keyboardType: TextInputType.phone,
-              decoration: const InputDecoration(labelText: 'WhatsApp'),
-            ),
-            const SizedBox(height: 16),
-            _buildBirthDatePicker(),
-
-            const SizedBox(height: 32),
-            _buildSectionHeader(Icons.payments_outlined, 'Financeiro', color: Colors.green),
-            TextFormField(
-              controller: _depositController,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold),
-              decoration: const InputDecoration(
-                labelText: 'Valor do Sinal (R\$)',
-                prefixIcon: Icon(Icons.attach_money, color: Colors.green),
-                helperText: 'Obrigatório para confirmar a vaga na viagem.',
-              ),
-              validator: (v) {
-                if (v == null || v.isEmpty) return 'Obrigatório';
-                final val = double.tryParse(v.replaceAll(',', '.'));
-                if (val == null || val <= 0) return 'Valor inválido';
-                return null;
-              },
-            ),
-
-            if (_isMinor) ...[
-              const SizedBox(height: 32),
-              _buildSectionHeader(Icons.family_restroom, 'Dados do Responsável', color: Colors.orange),
-              TextFormField(
-                controller: _guardianNameController,
-                decoration: const InputDecoration(labelText: 'Nome do Responsável'),
-                textCapitalization: TextCapitalization.words,
-                validator: (v) => _isMinor && v!.isEmpty ? 'Informe o nome do responsável' : null,
-              ),
-              const SizedBox(height: 16),
-              Row(
+              key: _formKey,
+              child: ListView(
+                padding: const EdgeInsets.all(24),
                 children: [
-                  Expanded(
-                    child: TextFormField(
-                      controller: _guardianDocController,
-                      decoration: const InputDecoration(labelText: 'Doc. Responsável'),
-                      validator: (v) => _isMinor && v!.isEmpty ? 'Obrigatório' : null,
+                  _buildSectionHeader(
+                    context,
+                    Icons.person_outline,
+                    'Identificação',
+                  ),
+                  TextFormField(
+                    controller: _nameController,
+                    decoration: const InputDecoration(
+                      labelText: 'Nome Completo',
+                      prefixIcon: Icon(Icons.badge_outlined),
+                    ),
+                    textCapitalization: TextCapitalization.words,
+                    validator: (v) => v!.isEmpty ? 'Campo obrigatório' : null,
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        flex: 2,
+                        child: TextFormField(
+                          controller: _docController,
+                          inputFormatters: [_docMask],
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            labelText: 'CPF/RG',
+                          ),
+                          validator: (v) {
+                            if (v == null || v.isEmpty) return 'Obrigatório';
+
+                            // Remove caracteres especiais para validar apenas os números
+                            final numbers = v.replaceAll(RegExp(r'[^0-9]'), '');
+
+                            // Regra para CPF (11 números após limpar a máscara)
+                            if (numbers.length == 11) {
+                              if (!_isValidCPF(numbers)) {
+                                return 'CPF Inválido';
+                              }
+                            }
+                            // Regra para RG (Geralmente entre 7 a 9 dígitos)
+                            else if (numbers.length < 7) {
+                              return 'Documento muito curto';
+                            }
+
+                            return null;
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(child: _buildBirthDateField(theme)),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _phoneController,
+                    inputFormatters: [_phoneMask],
+                    keyboardType: TextInputType.phone,
+                    decoration: const InputDecoration(
+                      labelText: 'WhatsApp/Celular',
+                      prefixIcon: Icon(Icons.phone_outlined),
                     ),
                   ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: TextFormField(
+
+                  if (isExcursionFlow) ...[
+                    const SizedBox(height: 32),
+                    _buildSectionHeader(
+                      context,
+                      Icons.directions_bus_outlined,
+                      'Vínculo com a Viagem',
+                      color: AppTheme.primaryColor,
+                    ),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            controller: _seatController,
+                            readOnly: true, // Impede digitar manualmente
+                            onTap: () async {
+                              // Abre a sua tela de mapa de assentos (SeatMap)
+                              final selectedSeat = await Navigator.pushNamed(
+                                context,
+                                '/map-seats',
+                                arguments: {
+                                  'excursionId': widget.excursionId,
+                                  'currentSeat': _seatController.text,
+                                  'isSelectionMode': true,
+
+                                },
+                              );
+
+                              if (selectedSeat != null &&
+                                  selectedSeat is String) {
+                                setState(() {
+                                  _seatController.text = selectedSeat;
+                                });
+                              }
+                            },
+                            decoration: const InputDecoration(
+                              labelText: 'Assento',
+                              hintText: 'Toque para selecionar',
+                              prefixIcon: Icon(Icons.event_seat),
+                              suffixIcon: Icon(Icons.arrow_drop_down),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              TextFormField(
+                                controller: _depositController,
+                                inputFormatters: [_currencyFormatter],
+                                keyboardType: TextInputType.number,
+                                style: const TextStyle(
+                                  color: AppTheme.successColor,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                                decoration: InputDecoration(
+                                  labelText: 'Valor Pago (R\$)',
+                                  prefixIcon: const Icon(
+                                    Icons.payments_outlined,
+                                    color: AppTheme.successColor,
+                                  ),
+                                  helperText: widget.excursionPrice != null
+                                      ? 'Preço: R\$ ${widget.excursionPrice!.toStringAsFixed(2)}'
+                                      : 'Valor recebido',
+                                  helperStyle: const TextStyle(
+                                    color: Colors.white54,
+                                    fontSize: 10,
+                                  ),
+                                ),
+                              ),
+                              if (widget.excursionPrice != null)
+                                TextButton.icon(
+                                  onPressed: () {
+                                    setState(() {
+                                      _depositController.text =
+                                          _currencyFormatter.formatDouble(
+                                            widget.excursionPrice!,
+                                          );
+                                    });
+                                  },
+                                  icon: const Icon(
+                                    Icons.check_circle_outline,
+                                    size: 14,
+                                  ),
+                                  label: const Text(
+                                    'PAGAMENTO TOTAL',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 0.5,
+                                    ),
+                                  ),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: AppTheme.successColor,
+                                    backgroundColor: AppTheme.successColor
+                                        .withValues(alpha: 0.05),
+                                    side: BorderSide(
+                                      color: AppTheme.successColor.withValues(
+                                        alpha: 0.5,
+                                      ),
+                                      width: 1.2,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 0,
+                                    ),
+                                    visualDensity: VisualDensity.compact,
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+
+                  if (_isMinor) ...[
+                    const SizedBox(height: 32),
+                    _buildSectionHeader(
+                      context,
+                      Icons.family_restroom_outlined,
+                      'Responsável Legal (Menor)',
+                      color: Colors.amber,
+                    ),
+                    TextFormField(
+                      controller: _guardianNameController,
+                      decoration: const InputDecoration(
+                        labelText: 'Nome do Responsável',
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
                       controller: _guardianPhoneController,
                       inputFormatters: [_phoneMask],
-                      keyboardType: TextInputType.phone,
-                      decoration: const InputDecoration(labelText: 'Tel. Responsável'),
-                      validator: (v) => _isMinor && v!.isEmpty ? 'Obrigatório' : null,
+                      decoration: const InputDecoration(
+                        labelText: 'Contato Responsável',
+                      ),
+                    ),
+                  ],
+
+                  const SizedBox(height: 48),
+                  ElevatedButton(
+                    onPressed: _submitForm,
+                    child: Text(
+                      widget.passenger == null
+                          ? 'FINALIZAR CADASTRO'
+                          : 'SALVAR ALTERAÇÕES',
                     ),
                   ),
                 ],
               ),
-            ],
-
-            const SizedBox(height: 40),
-            SizedBox(
-              height: 55,
-              child: ElevatedButton(
-                onPressed: _submitForm,
-                style: ElevatedButton.styleFrom(
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-                child: Text(
-                  widget.passenger == null ? 'CONFIRMAR E ADICIONAR' : 'SALVAR ALTERAÇÕES',
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                ),
-              ),
             ),
-          ],
-        ),
-      ),
     );
   }
 
-  Widget _buildSectionHeader(IconData icon, String title, {Color? color}) {
+  Widget _buildSectionHeader(
+    BuildContext context,
+    IconData icon,
+    String title, {
+    Color? color,
+  }) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: 16),
       child: Row(
         children: [
-          Icon(icon, size: 20, color: color ?? Colors.blue),
+          Icon(icon, size: 18, color: color ?? Theme.of(context).primaryColor),
           const SizedBox(width: 8),
-          Text(title.toUpperCase(),
-              style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: color ?? Colors.blue)),
+          Text(
+            title.toUpperCase(),
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 1.2,
+              color: color ?? Theme.of(context).primaryColor,
+            ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildBirthDatePicker() {
+  Widget _buildBirthDateField(ThemeData theme) {
     return InkWell(
-      onTap: () => _selectBirthDate(context),
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.05),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.white10),
-        ),
-        child: Row(
-          children: [
-            const Icon(Icons.cake_outlined, color: Colors.grey),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    _selectedBirthDate == null
-                        ? 'Data de Nascimento'
-                        : 'Nascimento: ${DateFormat('dd/MM/yyyy').format(_selectedBirthDate!)}',
-                    style: TextStyle(color: _selectedBirthDate == null ? Colors.grey : Colors.white),
-                  ),
-                  if (_selectedBirthDate != null)
-                    Text(
-                      _isMinor ? 'Passageiro Menor de Idade' : 'Passageiro Maior de Idade',
-                      style: TextStyle(color: _isMinor ? Colors.orange : Colors.green, fontSize: 11, fontWeight: FontWeight.bold),
-                    ),
-                ],
-              ),
-            ),
-            const Icon(Icons.calendar_month, size: 20, color: Colors.blue),
-          ],
+      onTap: () async {
+        final date = await showDatePicker(
+          context: context,
+          initialDate: _selectedBirthDate ?? DateTime(2000),
+          firstDate: DateTime(1900),
+          lastDate: DateTime.now(),
+        );
+        if (date != null) {
+          setState(() => _selectedBirthDate = date);
+          _calculateAge(date);
+        }
+      },
+      child: InputDecorator(
+        decoration: const InputDecoration(labelText: 'Nascimento'),
+        child: Text(
+          _selectedBirthDate == null
+              ? '--/--/----'
+              : "${_selectedBirthDate!.day.toString().padLeft(2, '0')}/${_selectedBirthDate!.month.toString().padLeft(2, '0')}/${_selectedBirthDate!.year}",
+          style: const TextStyle(fontSize: 14),
         ),
       ),
     );

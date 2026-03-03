@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../config/theme/app_theme.dart';
 import '../../models/enums.dart';
 import '../../models/passenger.dart';
-import '../../providers/passenger_provider.dart'; // Importado o novo Provider
+import '../../providers/passenger_provider.dart';
+import '../../providers/excursion_provider.dart';
 import '../../widgets/passenger_card.dart';
-import 'passenger_details_page.dart';
-import 'add_passenger_page.dart';
 
 class PassengersListPage extends StatefulWidget {
   final String excursionId;
@@ -19,196 +19,265 @@ class PassengersListPage extends StatefulWidget {
 class _PassengersListPageState extends State<PassengersListPage> {
   String _searchQuery = '';
   PassengerFilter _activeFilter = PassengerFilter.todos;
+  final TextEditingController _searchController = TextEditingController();
+
+  String _normalize(String text) {
+    return text
+        .toLowerCase()
+        .replaceAll(RegExp(r'[áàâã]'), 'a')
+        .replaceAll(RegExp(r'[éèê]'), 'e')
+        .replaceAll(RegExp(r'[íìî]'), 'i')
+        .replaceAll(RegExp(r'[óòôõ]'), 'o')
+        .replaceAll(RegExp(r'[úùû]'), 'u')
+        .replaceAll(RegExp(r'[ç]'), 'c');
+  }
 
   @override
   Widget build(BuildContext context) {
-    // Usando o PassengerProvider dedicado
-    final passengerProvider = context.read<PassengerProvider>();
+    final theme = Theme.of(context);
+
+    // O watch garante que a tela reconstrua se dados da excursão mudarem (contadores, etc)
+    final excursionProvider = context.watch<ExcursionProvider>();
+
+    // Busca a instância da excursão atual para obter o preço base (usado nos filtros)
+    final excursion = excursionProvider.excursions.cast<dynamic>().firstWhere(
+          (e) => e.id == widget.excursionId,
+      orElse: () => null,
+    );
+
+    if (excursion == null) {
+      // Se a excursão não for encontrada, mostra um estado de carregamento ou erro
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
+    // Captura a referência do provider aqui para usar no onTap do card de forma segura
+    final excursionProviderForTap = context.read<ExcursionProvider>();
 
     return Scaffold(
-      body: SafeArea(
-        child: Column(
-          children: [
-            _buildCustomAppBar(context),
-            _buildSearchBar(),
-            _buildFilterChips(),
-            const SizedBox(height: 8),
-            Expanded(
-              child: StreamBuilder<List<Passenger>>(
-                // Consumindo a Stream do PassengerProvider
-                stream: passengerProvider.watchPassengers(widget.excursionId),
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-
-                  if (snapshot.hasError) {
-                    return Center(child: Text('Erro ao carregar: ${snapshot.error}'));
-                  }
-
-                  final allPassengers = snapshot.data ?? [];
-
-                  // --- LÓGICA DE FILTRAGEM REFATORADA COM ENUMS ---
-                  final filteredPassengers = allPassengers.where((p) {
-                    // 1. Filtro de Texto (Nome)
-                    final matchesSearch = p.name.toLowerCase().contains(_searchQuery.toLowerCase());
-
-                    // 2. Filtro de Categoria (Usando BoardingStatus do Model)
-                    bool matchesCategory = true;
-                    switch (_activeFilter) {
-                      case PassengerFilter.pendentes:
-                        matchesCategory = p.statusEmbarque == BoardingStatus.aguardando;
-                        break;
-                      case PassengerFilter.embarcados:
-                        matchesCategory = p.statusEmbarque == BoardingStatus.embarcou;
-                        break;
-                      case PassengerFilter.menores:
-                        matchesCategory = p.isMinor;
-                        break;
-                      case PassengerFilter.todos:
-                        matchesCategory = true;
-                    }
-
-                    return matchesSearch && matchesCategory;
-                  }).toList();
-
-                  if (allPassengers.isEmpty) return _buildEmptyState(context);
-
-                  return CustomScrollView(
-                    slivers: [
-                      SliverPadding(
-                        padding: const EdgeInsets.fromLTRB(12, 8, 12, 100),
-                        sliver: SliverList(
-                          delegate: SliverChildBuilderDelegate(
-                                (context, index) => _PassengerListItem(
-                              passenger: filteredPassengers[index],
-                              excursionId: widget.excursionId,
-                            ),
-                            childCount: filteredPassengers.length,
-                          ),
-                        ),
-                      ),
-                    ],
-                  );
-                },
-              ),
-            ),
-          ],
+      appBar: AppBar(
+        title: const Text('Lista de Passageiros'),
+        centerTitle: true,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.pop(context),
         ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => AddPassengerPage(excursionId: widget.excursionId)),
-        ),
-        label: const Text('Novo Passageiro'),
-        icon: const Icon(Icons.person_add_rounded),
+      body: Column(
+        children: [
+          _buildSearchBar(theme),
+          _buildFilterChips(theme),
+          const SizedBox(height: 8),
+          Expanded(
+            child: Consumer<PassengerProvider>(
+              builder: (context, passengerProvider, child) {
+                return StreamBuilder<List<Passenger>>(
+                  // Este Stream é a "verdade absoluta" da sub-coleção 'vagas' no Firestore
+                  stream: passengerProvider.watchPassengers(widget.excursionId),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+
+                    if (snapshot.hasError) {
+                      return Center(child: Text("Erro: ${snapshot.error}"));
+                    }
+
+                    final allPassengers = snapshot.data ?? [];
+
+                    final filteredPassengers = allPassengers.where((p) {
+                      final nameMatch = _normalize(p.name).contains(_normalize(_searchQuery));
+
+                      bool categoryMatch;
+                      switch (_activeFilter) {
+                        case PassengerFilter.pendentes:
+                          categoryMatch = p.depositValue < (excursion.basePrice ?? 0);
+                          break;
+                        case PassengerFilter.confirmados:
+                          categoryMatch = p.depositValue >= (excursion.basePrice ?? 0);
+                          break;
+                        case PassengerFilter.menores:
+                          categoryMatch = p.isMinor;
+                          break;
+                        default:
+                          categoryMatch = true;
+                      }
+                      return nameMatch && categoryMatch;
+                    }).toList();
+
+                    if (allPassengers.isEmpty) return _buildEmptyState(theme);
+
+                    return ListView.builder(
+                      key: ValueKey('${widget.excursionId}_${_activeFilter.name}'),
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
+                      itemCount: filteredPassengers.length,
+                      itemBuilder: (context, index) {
+                        final passenger = filteredPassengers[index];
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: PassengerCard(
+                            key: ValueKey(passenger.id),
+                            passenger: passenger,
+                            excursionId: widget.excursionId,
+                            onTap: () async {
+                              // Aguarda retorno da tela de detalhes (pode ocorrer exclusão)
+                              await Navigator.pushNamed(
+                                context,
+                                '/passenger-details',
+                                arguments: {
+                                  'passenger': passenger,
+                                  'excursionId': widget.excursionId,
+                                },
+                              );
+                              // Sincroniza ao retornar para atualizar contadores de vagas/pagos
+                              if (mounted) {
+                                // Usa a referência segura capturada fora do builder
+                                excursionProviderForTap.syncExcursionStats(widget.excursionId);
+                              }
+                            },
+                          ),
+                        );
+                      },
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => _showAddOptions(context, excursion.basePrice?.toDouble() ?? 0.0),
+        backgroundColor: AppTheme.primaryColor,
+        child: const Icon(Icons.add, color: Colors.white, size: 30),
       ),
     );
   }
 
-  // --- COMPONENTES DE FILTRO ---
+  Widget _buildFilterChips(ThemeData theme) {
+    final filters = [
+      PassengerFilter.todos,
+      PassengerFilter.confirmados,
+      PassengerFilter.pendentes,
+      PassengerFilter.menores,
+    ];
 
-  Widget _buildFilterChips() {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Row(
-        children: PassengerFilter.values.map((filter) => _filterChip(filter)).toList(),
+        children: filters.map((filter) {
+          final isSelected = _activeFilter == filter;
+          return Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: FilterChip(
+              label: Text(filter.label),
+              selected: isSelected,
+              onSelected: (_) => setState(() => _activeFilter = filter),
+              backgroundColor: theme.scaffoldBackgroundColor,
+              selectedColor: theme.primaryColor.withValues(alpha: 0.2),
+              checkmarkColor: theme.primaryColor,
+              labelStyle: TextStyle(
+                fontSize: 12,
+                color: isSelected ? theme.primaryColor : Colors.white60,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+              ),
+            ),
+          );
+        }).toList(),
       ),
     );
   }
 
-  Widget _filterChip(PassengerFilter filter) {
-    final isSelected = _activeFilter == filter;
+  Widget _buildSearchBar(ThemeData theme) {
     return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: FilterChip(
-        label: Text(filter.label), // Usando a label do Enum
-        selected: isSelected,
-        onSelected: (selected) {
-          setState(() => _activeFilter = filter);
-        },
-        selectedColor: Theme.of(context).primaryColor.withOpacity(0.2),
-        checkmarkColor: Theme.of(context).primaryColor,
-        labelStyle: TextStyle(
-          color: isSelected ? Theme.of(context).primaryColor : Colors.grey,
-          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-          fontSize: 12,
-        ),
-        backgroundColor: Colors.grey[900],
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        side: BorderSide(
-          color: isSelected ? Theme.of(context).primaryColor : Colors.transparent,
-        ),
-      ),
-    );
-  }
-
-  // --- MÉTODOS DE UI ---
-
-  Widget _buildCustomAppBar(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(8.0),
-      child: Row(
-        children: [
-          IconButton(icon: const Icon(Icons.arrow_back), onPressed: () => Navigator.pop(context)),
-          const Text('Lista de Passageiros', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSearchBar() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
       child: TextField(
+        controller: _searchController,
         onChanged: (value) => setState(() => _searchQuery = value),
-        decoration: InputDecoration(
-          hintText: 'Buscar por nome...',
-          prefixIcon: const Icon(Icons.search, size: 20),
-          filled: true,
-          fillColor: Colors.grey[900],
-          contentPadding: EdgeInsets.zero,
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+        decoration: const InputDecoration(
+          hintText: 'Buscar passageiro...',
+          prefixIcon: Icon(Icons.search, size: 20),
         ),
       ),
     );
   }
 
-  Widget _buildEmptyState(BuildContext context) {
-    return const Center(
+  Widget _buildEmptyState(ThemeData theme) {
+    return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.people_outline, size: 64, color: Colors.white10),
-          SizedBox(height: 16),
-          Text('Nenhum passageiro encontrado.', style: TextStyle(color: Colors.grey)),
+          Icon(Icons.people_outline, size: 48, color: theme.disabledColor),
+          const SizedBox(height: 16),
+          const Text('Nenhum passageiro encontrado.'),
         ],
       ),
     );
   }
-}
 
-class _PassengerListItem extends StatelessWidget {
-  final Passenger passenger;
-  final String excursionId;
-  const _PassengerListItem({required this.passenger, required this.excursionId});
+  void _showAddOptions(BuildContext context, double basePrice) {
+    final theme = Theme.of(context);
+    // CAPTURA A REFERÊNCIA DO PROVIDER ANTES DO CÓDIGO ASSÍNCRONO
+    final excursionProvider = context.read<ExcursionProvider>();
 
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: PassengerCard(
-        passenger: passenger,
-        excursionId: excursionId,
-        onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => PassengerDetailsPage(excursionId: excursionId, passenger: passenger),
-          ),
-        ),
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppTheme.cardColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
+      builder: (context) {
+        return Container(
+          padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Adicionar Passageiro', style: theme.textTheme.titleLarge),
+              const SizedBox(height: 24),
+              ListTile(
+                leading: const CircleAvatar(child: Icon(Icons.person_add)),
+                title: const Text('Novo Cadastro'),
+                onTap: () async {
+                  Navigator.pop(context); // Fecha o BottomSheet
+                  await Navigator.pushNamed(
+                    context,
+                    '/add-passenger',
+                    arguments: {
+                      'excursionId': widget.excursionId,
+                      'excursionPrice': basePrice
+                    },
+                  );
+                  // USA A REFERÊNCIA SEGURA APÓS O AWAIT
+                  if (mounted) {
+                    excursionProvider.syncExcursionStats(widget.excursionId);
+                  }
+                },
+              ),
+              const Divider(color: Colors.white10),
+              ListTile(
+                leading: const CircleAvatar(child: Icon(Icons.person_search)),
+                title: const Text('Buscar no CRM'),
+                onTap: () async {
+                  Navigator.pop(context); // Fecha o BottomSheet
+                  await Navigator.pushNamed(
+                    context,
+                    '/global-passengers',
+                    arguments: {
+                      'excursionId': widget.excursionId,
+                      'excursionPrice': basePrice
+                    },
+                  );
+                  // USA A REFERÊNCIA SEGURA APÓS O AWAIT
+                  if (mounted) {
+                    excursionProvider.syncExcursionStats(widget.excursionId);
+                  }
+                },
+              ),
+              const SizedBox(height: 16),
+            ],
+          ),
+        );
+      },
     );
   }
 }

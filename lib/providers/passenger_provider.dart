@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../models/passenger.dart';
 import '../models/enums.dart';
 import '../repositories/passenger_repository.dart';
+import '../services/passenger_service.dart';
+import 'excursion_provider.dart';
 
 class PassengerProvider with ChangeNotifier {
-  final PassengerRepository _repository = PassengerRepository();
+  final PassengerService _service;
+  final PassengerRepository _crmRepository = PassengerRepository();
 
   bool _isLoading = false;
   bool get isLoading => _isLoading;
@@ -12,142 +16,197 @@ class PassengerProvider with ChangeNotifier {
   String? _errorMessage;
   String? get errorMessage => _errorMessage;
 
-  /// Busca global de passageiros (Future)
-  /// Usado na tela mestre de passageiros (independente de excursão)
-  Future<List<Passenger>> getAllPassengers() async {
-    _setLoading(true);
-    try {
-      return await _repository.getAllPassengers();
-    } catch (e) {
-      _errorMessage = e.toString();
-      return [];
-    } finally {
-      _setLoading(false);
-    }
+  PassengerProvider({PassengerService? service})
+      : _service = service ?? PassengerService(PassengerRepository());
+
+  void _setLoading(bool value) {
+    if (_isLoading == value) return;
+    _isLoading = value;
+    Future.microtask(() => notifyListeners());
   }
 
-  /// Busca passageiros vinculados a uma excursão específica (Future)
-  Future<List<Passenger>> getPassengers(String excursionId) async {
-    _setLoading(true);
-    try {
-      return await _repository.getPassengers(excursionId);
-    } catch (e) {
-      _errorMessage = e.toString();
-      return [];
-    } finally {
-      _setLoading(false);
-    }
-  }
+  // ===========================================================================
+  // CONSULTAS (READ)
+  // ===========================================================================
 
-  /// Monitora passageiros de uma excursão em tempo real (Stream)
+  /// Stream que observa todos os passageiros do usuário logado (CRM Global)
+  Stream<List<Passenger>> get globalPassengersStream =>
+      _crmRepository.getGlobalPassengersStream();
+
+  /// Stream que observa os passageiros vinculados a uma excursão específica
   Stream<List<Passenger>> watchPassengers(String excursionId) {
-    return _repository.getPassengersStream(excursionId);
+    return _service.watchPassengersForExcursion(excursionId);
   }
 
-  /// SALVAMENTO COM REGRA DE NEGÓCIO:
-  /// 1. Salva o cadastro básico do passageiro.
-  /// 2. Se um [excursionId] for fornecido, tenta vincular exigindo o [depositValue].
+  // ===========================================================================
+  // OPERAÇÕES OPERACIONAIS (CHECK-IN / FINANCEIRO / VÍNCULO)
+  // ===========================================================================
+
+  Future<void> updateOperationalData({
+    required BuildContext context,
+    required String excursionId,
+    required String passengerId,
+    BoardingStatus? status,
+    String? localAtual,
+    String? seatNumber,
+    double? depositValue,
+    double? totalValue,
+    String? agenteId,
+  }) async {
+    _setLoading(true);
+    try {
+      final updates = <String, dynamic>{};
+      bool justFinishedPaying = false;
+
+      if (status != null) updates['statusEmbarque'] = status.value;
+      if (localAtual != null) updates['localAtual'] = localAtual;
+      if (seatNumber != null) updates['poltrona'] = seatNumber; // Ajustado para 'poltrona'
+
+      if (depositValue != null) {
+        updates['depositValue'] = depositValue;
+        if (totalValue != null && depositValue >= totalValue) {
+          justFinishedPaying = true;
+          updates['isPaid'] = true;
+        } else {
+          updates['isPaid'] = false;
+        }
+      }
+      if (agenteId != null) updates['agenteId'] = agenteId;
+
+      await _service.updateOperationalStatus(
+        passengerId: passengerId,
+        excursionId: excursionId,
+        updates: updates,
+        justFinishedPaying: justFinishedPaying,
+      );
+
+      if (context.mounted) {
+        await context.read<ExcursionProvider>().syncExcursionStats(excursionId);
+      }
+      notifyListeners();
+    } catch (e) {
+      _errorMessage = e.toString().replaceFirst('Exception: ', '');
+      rethrow;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  /// Desvincula o passageiro da excursão (mantendo-o no CRM)
+  Future<void> unlinkPassenger({
+    required BuildContext context,
+    required String passengerId,
+    required String excursionId,
+  }) async {
+    _setLoading(true);
+    try {
+      await _service.unlinkFromExcursion(
+        passengerId: passengerId,
+        excursionId: excursionId,
+      );
+
+      if (context.mounted) {
+        await context.read<ExcursionProvider>().syncExcursionStats(excursionId);
+      }
+
+      notifyListeners();
+    } catch (e) {
+      _errorMessage = e.toString().replaceFirst('Exception: ', '');
+      rethrow;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  // ===========================================================================
+  // GESTÃO DE CADASTRO E CRM
+  // ===========================================================================
+
+  /// Salva ou Atualiza um passageiro no CRM e, opcionalmente, vincula a uma excursão
   Future<bool> savePassenger({
+    required BuildContext context,
     required Passenger passenger,
     String? excursionId,
     double? depositValue,
+    double? totalExcursionValue,
   }) async {
     _setLoading(true);
     _errorMessage = null;
-
     try {
-      // Etapa 1: Salva o cadastro básico (Base Mestre)
-      final String passengerId = await _repository.savePassenger(passenger);
+      // 1. Salva na Base Mestre (CRM)
+      final String passengerId = await _crmRepository.savePassenger(passenger);
 
-      // Etapa 2: Se houver intenção de vincular a uma excursão
+      // 2. Se houver ID de excursão, realiza o vínculo/vaga
       if (excursionId != null && excursionId.isNotEmpty) {
-        if (depositValue == null || depositValue <= 0) {
-          throw Exception("O pagamento do sinal é obrigatório para cadastrar na excursão.");
-        }
-
-        await _repository.linkToExcursion(
+        await _service.linkToExcursion(
           passengerId: passengerId,
           excursionId: excursionId,
-          depositValue: depositValue,
+          depositValue: depositValue ?? 0.0,
+          totalValue: totalExcursionValue ?? 0.0,
+          seatNumber: passenger.seatNumber, // Envia para validar poltrona ocupada
         );
+
+        if (context.mounted) {
+          await context.read<ExcursionProvider>().syncExcursionStats(excursionId);
+        }
       }
 
-      return true;
-    } catch (e) {
-      _errorMessage = e.toString().contains('permission-denied')
-          ? 'Erro de permissão no servidor.'
-          : e.toString().replaceFirst('Exception: ', '');
-      return false;
-    } finally {
-      _setLoading(false);
-    }
-  }
-
-  /// Método dedicado apenas para vincular passageiros já existentes a novas excursões
-  Future<bool> linkExistingPassenger({
-    required String passengerId,
-    required String excursionId,
-    required double depositValue,
-  }) async {
-    _setLoading(true);
-    _errorMessage = null;
-    try {
-      await _repository.linkToExcursion(
-        passengerId: passengerId,
-        excursionId: excursionId,
-        depositValue: depositValue,
-      );
+      notifyListeners();
       return true;
     } catch (e) {
       _errorMessage = e.toString().replaceFirst('Exception: ', '');
-      return false;
-    } finally {
-      _setLoading(false);
-    }
-  }
-
-  /// Atualiza o assento (String? suporta letras e números)
-  Future<void> updatePassengerSeat(String passengerId, String? newSeat) async {
-    _setLoading(true);
-    try {
-      await _repository.updatePassengerSeat(passengerId, newSeat);
-      _errorMessage = null;
-    } catch (e) {
-      _errorMessage = e.toString();
+      debugPrint("❌ PassengerProvider Error: $_errorMessage");
+      // Relançamos para que a UI (AddPassengerPage) capture no catch e mostre o SnackBar
       rethrow;
     } finally {
       _setLoading(false);
     }
   }
 
-  Future<void> updateBoardingStatus({
+  /// Vincula um passageiro que já existe no CRM a uma nova excursão
+  Future<bool> linkExistingPassenger({
+    required BuildContext context,
     required String passengerId,
-    required BoardingStatus status,
-    required String agenteId,
+    required String excursionId,
+    required double depositValue,
+    required double totalValue,
+    String? seatNumber,
   }) async {
+    _setLoading(true);
+    _errorMessage = null;
     try {
-      await _repository.updateBoardingStatus(
+      await _service.linkToExcursion(
         passengerId: passengerId,
-        statusValue: status.value,
-        agenteId: agenteId,
+        excursionId: excursionId,
+        depositValue: depositValue,
+        totalValue: totalValue,
+        seatNumber: seatNumber,
       );
+
+      if (context.mounted) {
+        await context.read<ExcursionProvider>().syncExcursionStats(excursionId);
+      }
+      notifyListeners();
+      return true;
     } catch (e) {
-      debugPrint('Erro no check-in: $e');
+      _errorMessage = e.toString().replaceFirst('Exception: ', '');
       rethrow;
+    } finally {
+      _setLoading(false);
     }
   }
 
+  /// Remove permanentemente o passageiro do CRM
   Future<void> deletePassenger(String passengerId) async {
     _setLoading(true);
     try {
-      await _repository.deletePassenger(passengerId);
+      await _crmRepository.deletePassenger(passengerId);
+      notifyListeners();
+    } catch (e) {
+      _errorMessage = e.toString().replaceFirst('Exception: ', '');
+      rethrow;
     } finally {
       _setLoading(false);
     }
-  }
-
-  void _setLoading(bool value) {
-    _isLoading = value;
-    notifyListeners();
   }
 }

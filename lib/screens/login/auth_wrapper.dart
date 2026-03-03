@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 import 'package:transferr/screens/home_page.dart';
 import '../../providers/auth_provider.dart';
 import 'login_page.dart';
-import '../excursions/excursions_page.dart';
 
 class AuthWrapper extends StatelessWidget {
   const AuthWrapper({super.key});

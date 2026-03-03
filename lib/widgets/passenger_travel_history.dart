@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/excursion_provider.dart';
-import '../../widgets/excursion_card.dart';
+import '../screens/excursions/widgets/excursion_card.dart';
 import '../../config/theme/app_theme.dart';
 
 class PassengerTravelHistory extends StatelessWidget {

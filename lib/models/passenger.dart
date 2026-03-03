@@ -1,47 +1,56 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/material.dart';
-
 import 'enums.dart';
 
-/// Enum para gerenciar os estados de embarque de forma tipada
-
+/// Representa a entidade de Domínio do Passageiro
 class Passenger {
+  // --- IDENTIDADE E CONTATO ---
   final String id;
-  final String excursionId;
   final String name;
   final String document;
   final String phone;
   final DateTime birthDate;
-  final String seatNumber;
   final bool isMinor;
+
+  // --- VÍNCULO COM EXCURSÃO ATIVA ---
+  final String excursionId;
+  final String seatNumber;
   final double depositValue;
-  final int totalTrips;
-
-
-  // Controle de Embarque
+  final bool isPaid;
   final BoardingStatus statusEmbarque;
   final String? agenteResponsavel;
 
-  // Dados do Responsável (Encapsulados)
+  // Armazena onde o passageiro realizou a última ação (embarque/parada/desembarque)
+  final String? ultimaParada;
+
+  // --- HISTÓRICO E METADADOS ---
+  final int totalTrips;
+  final DateTime? lastUpdate;
+
+  // --- COMPOSIÇÃO ---
   final Guardian? guardian;
 
   Passenger({
     required this.id,
-    required this.excursionId,
+    this.excursionId = '',
     required this.name,
     required this.document,
     required this.phone,
     required this.birthDate,
-    required this.seatNumber,
-    required this.isMinor,
+    this.seatNumber = '',
+    this.isMinor = false,
+    this.isPaid = false,
     this.statusEmbarque = BoardingStatus.aguardando,
     this.agenteResponsavel,
+    this.ultimaParada,
     this.guardian,
     this.depositValue = 0.0,
     this.totalTrips = 0,
+    this.lastUpdate,
   });
 
-  // --- GETTERS DE NEGÓCIO ---
+  // ===========================================================================
+  // REGRAS DE NEGÓCIO (GETTERS)
+  // ===========================================================================
 
   bool get hasGuardian => isMinor && guardian != null;
 
@@ -55,7 +64,9 @@ class Passenger {
     return age;
   }
 
-  // --- MAPEAR PARA/DO FIREBASE ---
+  // ===========================================================================
+  // MAPEAMENTO (DATA TRANSFER OBJECT PATTERN)
+  // ===========================================================================
 
   Map<String, dynamic> toMap() {
     return {
@@ -64,13 +75,16 @@ class Passenger {
       'documento': document,
       'telefone': phone,
       'nascimento': Timestamp.fromDate(birthDate),
-      'poltrona': seatNumber,
       'ehMenor': isMinor,
+      'poltrona': seatNumber,
+      'excursaoId': excursionId,
       'statusEmbarque': statusEmbarque.value,
       'agenteResponsavel': agenteResponsavel,
+      'ultimaParada': ultimaParada,
       'responsavel': isMinor ? guardian?.toMap() : null,
-      'atualizadoEm': FieldValue.serverTimestamp(),
-      'valorDeposito': depositValue,
+      'depositValue': depositValue,
+      'isPaid': isPaid,
+      'lastUpdate': FieldValue.serverTimestamp(),
       'totalViagens': totalTrips,
     };
   }
@@ -78,25 +92,31 @@ class Passenger {
   factory Passenger.fromMap(String id, Map<String, dynamic> map) {
     return Passenger(
       id: id,
-      excursionId: '',
       name: map['nome'] ?? '',
       document: map['documento'] ?? '',
       phone: map['telefone'] ?? '',
-      birthDate: (map['nascimento'] as Timestamp).toDate(),
-      seatNumber: map['poltrona'] ?? '',
+      birthDate: (map['nascimento'] as Timestamp?)?.toDate() ?? DateTime.now(),
       isMinor: map['ehMenor'] ?? false,
+      excursionId: map['excursaoId'] ?? '',
+      seatNumber: map['poltrona'] ?? '',
       statusEmbarque: BoardingStatus.fromString(map['statusEmbarque']),
       agenteResponsavel: map['agenteResponsavel'],
+      ultimaParada: map['ultimaParada'],
       guardian: map['responsavel'] != null
           ? Guardian.fromMap(map['responsavel'])
           : null,
       depositValue: (map['depositValue'] ?? 0.0).toDouble(),
+      isPaid: map['isPaid'] ?? false,
       totalTrips: (map['totalViagens'] ?? 0).toInt(),
-
+      lastUpdate: map['lastUpdate'] is Timestamp
+          ? (map['lastUpdate'] as Timestamp).toDate()
+          : null,
     );
   }
 
-  // --- IMUTABILIDADE (COPYWITH) ---
+  // ===========================================================================
+  // IMUTABILIDADE (COPYWITH)
+  // ===========================================================================
 
   Passenger copyWith({
     String? id,
@@ -109,14 +129,17 @@ class Passenger {
     bool? isMinor,
     BoardingStatus? statusEmbarque,
     String? agenteResponsavel,
+    String? ultimaParada,
     Guardian? guardian,
     double? depositValue,
+    bool? isPaid,
     int? totalTrips,
+    DateTime? lastUpdate,
   }) {
     return Passenger(
-      id: this.id,
-      excursionId: this.excursionId,
+      id: id ?? this.id,
       name: name ?? this.name,
+      excursionId: excursionId ?? this.excursionId,
       document: document ?? this.document,
       phone: phone ?? this.phone,
       birthDate: birthDate ?? this.birthDate,
@@ -124,14 +147,16 @@ class Passenger {
       isMinor: isMinor ?? this.isMinor,
       statusEmbarque: statusEmbarque ?? this.statusEmbarque,
       agenteResponsavel: agenteResponsavel ?? this.agenteResponsavel,
+      ultimaParada: ultimaParada ?? this.ultimaParada,
       guardian: guardian ?? this.guardian,
       depositValue: depositValue ?? this.depositValue,
+      isPaid: isPaid ?? this.isPaid,
       totalTrips: totalTrips ?? this.totalTrips,
+      lastUpdate: lastUpdate ?? this.lastUpdate,
     );
   }
 }
 
-/// Classe auxiliar para dados do Responsável
 class Guardian {
   final String? id;
   final String name;
@@ -146,7 +171,12 @@ class Guardian {
   });
 
   Map<String, dynamic> toMap() {
-    return {'id': id, 'nome': name, 'documento': document, 'telefone': phone};
+    return {
+      'id': id,
+      'nome': name,
+      'documento': document,
+      'telefone': phone,
+    };
   }
 
   factory Guardian.fromMap(Map<String, dynamic> map) {

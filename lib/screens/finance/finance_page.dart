@@ -16,11 +16,14 @@ class FinancePage extends StatefulWidget {
 
 class _FinancePageState extends State<FinancePage> {
   bool _isLoading = true;
-  double _totalGrossRevenue = 0.0;
-  double _totalNetRevenue = 0.0;
-  int _totalExcursions = 0;
 
-  // Usa o novo enum de filtro financeiro que definimos
+  // Indicadores Consolidados
+  double _totalProjectedRevenue = 0.0; // Faturamento Total Previsto
+  double _totalEstimatedRevenue = 0.0; // Faturamento com Reservas Atuais
+  int _totalExcursions = 0;
+  int _totalSeats = 0;
+  int _totalReserved = 0;
+
   FinanceFilter _selectedFilter = FinanceFilter.todos;
 
   @override
@@ -29,65 +32,56 @@ class _FinancePageState extends State<FinancePage> {
     _loadFinanceData();
   }
 
-  /// Método centralizado para carregar os dados financeiros
+  /// Carrega e processa os dados usando a lógica de negócio do Model (DDD)
   Future<void> _loadFinanceData() async {
     if (!mounted) return;
     setState(() => _isLoading = true);
 
     try {
-      // Referência para a coleção principal de excursões
-      // (Ajustado para a estrutura global que estamos seguindo)
-      Query query = FirebaseFirestore.instance.collection('excursions');
+      // Busca na coleção correta 'excursoes' definida no Repository
+      Query query = FirebaseFirestore.instance.collection('excursoes');
 
-      // Aplica os filtros baseados nos Enums Tipados
-      switch (_selectedFilter) {
-        case FinanceFilter.concluido:
-        // Agora usamos o nome correto do status concluído
-          query = query.where('status', isEqualTo: ExcursionStatus.concluida.name);
-          break;
-        case FinanceFilter.aberto:
-        // Filtra por excursões que ainda não foram finalizadas ou canceladas
-          query = query.where('status', whereIn: [
-            ExcursionStatus.programada.name,
-            ExcursionStatus.programada.name,
-          ]);
-          break;
-        case FinanceFilter.todos:
-        // Sem filtro adicional
-          break;
+      // Aplica filtros de Status
+      if (_selectedFilter == FinanceFilter.concluido) {
+        query = query.where('status', isEqualTo: 'CONCLUIDA');
+      } else if (_selectedFilter == FinanceFilter.aberto) {
+        query = query.where('status', whereIn: ['PROGRAMADA', 'EM_ANDAMENTO']);
       }
 
       final querySnapshot = await query.get();
 
-      double calculatedGross = 0.0;
-      double calculatedNet = 0.0;
+      double calcProjected = 0.0;
+      double calcEstimated = 0.0;
+      int calcSeats = 0;
+      int calcReserved = 0;
 
       for (var doc in querySnapshot.docs) {
-        // Mapeamento seguro usando o factory fromFirestore do modelo Excursion
-        final excursion = Excursion.fromFirestore(doc as QueryDocumentSnapshot<Map<String, dynamic>>);
+        final data = doc.data() as Map<String, dynamic>;
+        final excursion = Excursion.fromMap(doc.id, data);
 
-        // As propriedades grossRevenue e netRevenue são getters calculados no modelo
-        calculatedGross += excursion.totalSeats;
-        calculatedNet += excursion.reservedSeats;
+        // OPERAÇÃO LOCAL (DDD): Usando os getters calculados no Model
+        calcProjected += excursion.faturamentoPrevisto;
+        calcEstimated += excursion.faturamentoEstimadoAtual;
+        calcSeats += excursion.totalSeats;
+        calcReserved += excursion.reservedSeats;
       }
 
       if (mounted) {
         setState(() {
-          _totalGrossRevenue = calculatedGross;
-          _totalNetRevenue = calculatedNet;
+          _totalProjectedRevenue = calcProjected;
+          _totalEstimatedRevenue = calcEstimated;
+          _totalSeats = calcSeats;
+          _totalReserved = calcReserved;
           _totalExcursions = querySnapshot.docs.length;
           _isLoading = false;
         });
       }
     } catch (e) {
-      debugPrint("Erro Financeiro: $e");
+      debugPrint("[FinancePage] Erro: $e");
       if (mounted) {
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Erro ao carregar finanças: $e'),
-            backgroundColor: Theme.of(context).colorScheme.error,
-          ),
+          SnackBar(content: Text('Erro ao carregar dados: $e')),
         );
       }
     }
@@ -101,74 +95,134 @@ class _FinancePageState extends State<FinancePage> {
     return Scaffold(
       drawer: const AppDrawer(),
       appBar: AppBar(
-        title: const Text('Resumo Financeiro'),
+        title: const Text('Painel Financeiro'),
         elevation: 0,
       ),
       body: RefreshIndicator(
         onRefresh: _loadFinanceData,
-        color: theme.primaryColor,
-        child: _isLoading
-            ? _buildLoadingSkeleton()
-            : ListView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(16.0),
-          children: [
-            _buildFilterChips(),
-            const SizedBox(height: 16),
+        child: _isLoading ? _buildLoadingSkeleton() : _buildContent(theme, textTheme),
+      ),
+    );
+  }
 
-            // Card Principal de Resumo
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(24.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(Icons.analytics_outlined, color: theme.primaryColor),
-                        const SizedBox(width: 8),
-                        Text('Consolidado', style: textTheme.titleMedium),
-                      ],
-                    ),
-                    const Divider(height: 32),
-                    _buildFinancialSummaryRow(
-                      context: context,
-                      label: 'Renda Bruta:',
-                      value: _totalGrossRevenue.toCurrency(),
-                    ),
-                    const SizedBox(height: 16),
-                    _buildFinancialSummaryRow(
-                      context: context,
-                      label: 'Renda Líquida Estimada:',
-                      value: _totalNetRevenue.toCurrency(),
-                      isHighlight: true,
-                    ),
-                    const SizedBox(height: 32),
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.05),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.info_outline, size: 16, color: Colors.grey),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              'Baseado em $_totalExcursions excursões no filtro "${_selectedFilter.label}".',
-                              style: textTheme.bodySmall?.copyWith(color: Colors.grey),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+  Widget _buildContent(ThemeData theme, TextTheme textTheme) {
+    return ListView(
+      padding: const EdgeInsets.all(16.0),
+      children: [
+        _buildFilterChips(),
+        const SizedBox(height: 20),
+
+        // CARD PRINCIPAL: RESUMO DE VALORES
+        _buildMainSummaryCard(theme, textTheme),
+
+        const SizedBox(height: 16),
+
+        // CARD SECUNDÁRIO: MÉTRICAS DE OCUPAÇÃO
+        _buildOccupancyCard(theme, textTheme),
+      ],
+    );
+  }
+
+  Widget _buildMainSummaryCard(ThemeData theme, TextTheme textTheme) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.payments_outlined, color: theme.primaryColor),
+                const SizedBox(width: 8),
+                Text('Consolidado Monetário', style: textTheme.titleMedium),
+              ],
             ),
+            const Divider(height: 32),
+            _buildRow('Total Previsto (100%):', _totalProjectedRevenue.toCurrency(), textTheme),
+            const SizedBox(height: 16),
+            _buildRow(
+              'Total Estimado (Reservas):',
+              _totalEstimatedRevenue.toCurrency(),
+              textTheme,
+              isHighlight: true,
+              color: theme.primaryColor,
+            ),
+            const SizedBox(height: 24),
+            _buildFooterInfo('Baseado em $_totalExcursions excursões filtradas.'),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildOccupancyCard(ThemeData theme, TextTheme textTheme) {
+    final double percent = _totalSeats > 0 ? (_totalReserved / _totalSeats) : 0;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text("Ocupação Geral", style: textTheme.bodyMedium),
+                Text("${(percent * 100).toStringAsFixed(1)}%",
+                    style: textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold, color: theme.primaryColor)),
+              ],
+            ),
+            const SizedBox(height: 12),
+            LinearProgressIndicator(
+              value: percent,
+              backgroundColor: Colors.white10,
+              borderRadius: BorderRadius.circular(10),
+              minHeight: 8,
+            ),
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.people_outline, size: 14, color: Colors.grey),
+                const SizedBox(width: 6),
+                Text("$_totalReserved de $_totalSeats assentos ocupados",
+                    style: textTheme.bodySmall?.copyWith(color: Colors.grey)),
+              ],
+            )
+          ],
+        ),
+      ),
+    );
+  }
+
+  // --- WIDGETS AUXILIARES ---
+
+  Widget _buildRow(String label, String value, TextTheme textTheme, {bool isHighlight = false, Color? color}) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(label, style: textTheme.bodyMedium?.copyWith(color: Colors.white70)),
+        Text(value, style: textTheme.titleLarge?.copyWith(
+          fontWeight: FontWeight.bold,
+          color: color ?? Colors.white,
+          fontSize: isHighlight ? 22 : 18,
+        )),
+      ],
+    );
+  }
+
+  Widget _buildFooterInfo(String text) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.info_outline, size: 16, color: Colors.grey),
+          const SizedBox(width: 8),
+          Text(text, style: const TextStyle(color: Colors.grey, fontSize: 11)),
+        ],
       ),
     );
   }
@@ -190,42 +244,13 @@ class _FinancePageState extends State<FinancePage> {
                   _loadFinanceData();
                 }
               },
-              // Uso do withValues conforme solicitado
               backgroundColor: Colors.white.withValues(alpha: 0.05),
               selectedColor: Theme.of(context).primaryColor.withValues(alpha: 0.2),
-              side: BorderSide(
-                color: isSelected ? Theme.of(context).primaryColor : Colors.white10,
-              ),
-              labelStyle: TextStyle(
-                color: isSelected ? Theme.of(context).primaryColor : Colors.white70,
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-              ),
+              side: BorderSide(color: isSelected ? Theme.of(context).primaryColor : Colors.white10),
             ),
           );
         }).toList(),
       ),
-    );
-  }
-
-  Widget _buildFinancialSummaryRow({
-    required BuildContext context,
-    required String label,
-    required String value,
-    bool isHighlight = false,
-  }) {
-    final theme = Theme.of(context);
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(label, style: theme.textTheme.bodyLarge),
-        Text(
-          value,
-          style: theme.textTheme.titleLarge?.copyWith(
-            fontWeight: FontWeight.bold,
-            color: isHighlight ? theme.primaryColor : Colors.white,
-          ),
-        ),
-      ],
     );
   }
 
@@ -238,8 +263,8 @@ class _FinancePageState extends State<FinancePage> {
         child: Column(
           children: [
             Container(height: 40, decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(20))),
-            const SizedBox(height: 16),
-            Container(height: 250, decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(12))),
+            const SizedBox(height: 20),
+            Container(height: 200, decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(12))),
           ],
         ),
       ),

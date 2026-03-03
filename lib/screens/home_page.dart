@@ -5,7 +5,7 @@ import '../models/excursion.dart';
 import '../providers/excursion_provider.dart';
 import '../providers/auth_provider.dart'; // Importe seu AuthProvider
 import '../widgets/app_drawer.dart';
-import '../widgets/excursion_card.dart';
+import 'excursions/widgets/excursion_card.dart';
 import 'excursions/excursion_dashboard_page.dart';
 
 class HomePage extends StatefulWidget { // Alterado para StatefulWidget para gerenciar a inicialização
@@ -179,14 +179,14 @@ class _StatCard extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.05),
+          color: color.withValues(alpha: 0.05),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: color.withOpacity(0.2)),
+          border: Border.all(color: color.withValues(alpha: 0.2)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(icon, size: 18, color: color.withOpacity(0.7)),
+            Icon(icon, size: 18, color: color.withValues(alpha: 0.7)),
             const SizedBox(height: 8),
             Text(label, style: TextStyle(fontSize: 12, color: Colors.grey[400])),
             const SizedBox(height: 4),
@@ -232,7 +232,7 @@ class _ExcursionListItem extends StatelessWidget {
         onTap: () => Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (_) => ExcursionDashboardPage(excursionId: excursion.id!),
+            builder: (_) => ExcursionDashboardPage(excursionId: excursion.id),
           ),
         ),
       ),

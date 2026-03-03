@@ -31,10 +31,11 @@ enum PaymentStatus {
 }
 
 /// Status de Embarque (Check-in em tempo real)
-/// Refatorado para Enhanced Enum para eliminar switches repetitivos
 enum BoardingStatus {
   aguardando('AGUARDANDO', 'Aguardando', Colors.orange, Icons.access_time_filled),
-  embarcou('EMBARCOU', 'Embarcou', Colors.green, Icons.check_circle),
+  embarcou('EMBARCOU', 'Embarcado', Colors.green, Icons.directions_bus),
+  parada('PARADA', 'Em Parada', Colors.blue, Icons.coffee), // Útil para conferência em postos
+  desembarcou('DESEMBARCOU', 'Desembarcou', Colors.purple, Icons.location_on),
   naoEmbarcou('NAO_EMBARCOU', 'Faltou', Colors.red, Icons.cancel);
 
   final String value; // Valor para o Firebase
@@ -57,7 +58,7 @@ enum BoardingStatus {
 enum PassengerFilter {
   todos('Todos'),
   pendentes('Pendentes'),
-  embarcados('Embarcados'),
+  confirmados('Confirmados'),
   menores('Menores');
 
   final String label;

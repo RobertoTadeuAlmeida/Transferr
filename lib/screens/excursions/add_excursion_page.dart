@@ -111,7 +111,7 @@ class _AddExcursionPageState extends State<AddExcursionPage> {
       final price = double.tryParse(plainValue) ?? 0.0;
 
       final excursion = Excursion(
-        id: widget.excursion?.id,
+        id: widget.excursion?.id ?? '',
         name: _nameController.text.trim(),
         description: _descController.text.trim(),
         idMainDestination: _destIdController.text.trim(),
@@ -336,7 +336,7 @@ class _AddExcursionPageState extends State<AddExcursionPage> {
 class CurrencyInputFormatter extends TextInputFormatter {
   @override
   TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) {
-    if (newValue.selection.baseOffset == 0) return newValue;
+    if (newValue.text.isEmpty) return newValue;
 
     double value = double.parse(newValue.text);
     final formatter = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');

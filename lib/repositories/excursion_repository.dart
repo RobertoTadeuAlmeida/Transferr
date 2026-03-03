@@ -1,58 +1,50 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/foundation.dart';
 import '../models/excursion.dart';
-import '../models/passenger.dart';
+import '../models/expense.dart';
 
 class ExcursionRepository {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  // Referência base para facilitar o acesso
+  // --- REFERÊNCIAS ---
   CollectionReference<Map<String, dynamic>> get _excursionsRef =>
       _firestore.collection('excursoes');
 
-  // --- MÉTODOS DE EXCURSÃO ---
+  CollectionReference<Map<String, dynamic>> _vagasRef(String excursionId) =>
+      _excursionsRef.doc(excursionId).collection('vagas');
 
-  /// Escuta mudanças nas excursões filtrando pelo responsável (segurança)
-  /// Se você não quiser filtrar agora, remova o .where()
-  Stream<List<Excursion>> getExcursionsStream({String? responsibleId}) {
+  CollectionReference<Map<String, dynamic>> _expensesRef(String excursionId) =>
+      _excursionsRef.doc(excursionId).collection('despesas');
+
+  // =========================================================================
+  // 1. MÉTODOS DE EXCURSÃO (DOCUMENTO PAI)
+  // =========================================================================
+
+  /// Ouve o stream de excursões, com filtro opcional por responsável.
+  Stream<List<Excursion>> watchExcursions({String? responsibleId}) {
     Query<Map<String, dynamic>> query = _excursionsRef;
-
     if (responsibleId != null) {
       query = query.where('idResponsavel', isEqualTo: responsibleId);
     }
-
     return query
         .orderBy('dataPartida', descending: false)
         .snapshots()
         .map((snapshot) => snapshot.docs
-        .map((doc) => Excursion.fromFirestore(doc))
+        .map((doc) => Excursion.fromMap(doc.id, doc.data()))
         .toList());
   }
 
-  Future<void> addExcursion(Excursion excursion) async {
-    try {
-      // Limpamos o mapa para evitar erros de tipos (Pigeon) e campos nulos
-      final data = _cleanMap(excursion.toMap());
-      await _excursionsRef.add(data);
-    } catch (e) {
-      debugPrint("Erro ao adicionar no Firestore: $e");
-      rethrow;
-    }
+  /// Adiciona um novo documento de excursão.
+  Future<void> add(Excursion excursion) async {
+    await _excursionsRef.add(_cleanMap(excursion.toMap()));
   }
 
-  Future<void> updateExcursion(Excursion excursion) async {
-    if (excursion.id == null) return;
-    try {
-      final data = _cleanMap(excursion.toMap());
-      await _excursionsRef.doc(excursion.id).update(data);
-    } catch (e) {
-      debugPrint("Erro ao atualizar no Firestore: $e");
-      rethrow;
-    }
+  /// Atualiza dados no documento de uma excursão.
+  Future<void> update(String excursionId, Map<String, dynamic> data) async {
+    await _excursionsRef.doc(excursionId).update(_cleanMap(data));
   }
 
-  /// Deleta múltiplas excursões usando WriteBatch
-  Future<void> deleteMultipleExcursions(List<String> ids) async {
+  /// Deleta múltiplos documentos de excursão em um lote.
+  Future<void> deleteMany(List<String> ids) async {
     final batch = _firestore.batch();
     for (var id in ids) {
       batch.delete(_excursionsRef.doc(id));
@@ -60,64 +52,45 @@ class ExcursionRepository {
     await batch.commit();
   }
 
-  // --- MÉTODOS DE PASSAGEIROS (SUB-COLEÇÃO) ---
+  // =========================================================================
+  // 2. MÉTODOS DE VAGAS (SUB-COLEÇÃO)
+  // =========================================================================
 
-  CollectionReference<Map<String, dynamic>> _vagasRef(String excursionId) =>
-      _excursionsRef.doc(excursionId).collection('vagas');
+  /// Ouve a sub-coleção de vagas de uma excursão.
+  Stream<QuerySnapshot<Map<String, dynamic>>> watchVacancies(String excursionId) {
+    return _vagasRef(excursionId).snapshots();
+  }
 
-  Stream<List<Passenger>> getPassengersStream(String excursionId) {
-    return _vagasRef(excursionId)
-        .orderBy('name')
+  // =========================================================================
+  // 3. MÉTODOS DE DESPESAS (SUB-COLEÇÃO)
+  // =========================================================================
+
+  /// Ouve a sub-coleção de despesas de uma excursão.
+  Stream<List<Expense>> watchExpenses(String excursionId) {
+    return _expensesRef(excursionId)
+        .orderBy('data', descending: true)
         .snapshots()
-        .map((snap) => snap.docs
-        .map((doc) => Passenger.fromMap(doc.id, doc.data()))
-        .toList());
+        .map((snap) =>
+        snap.docs.map((doc) => Expense.fromMap(doc.id, doc.data())).toList());
   }
 
-  /// Adiciona/Atualiza passageiro e incrementa contador de vagas atômico
-  Future<void> addOrUpdatePassenger(String excursionId, Passenger passenger) async {
-    final passengerDocRef = _vagasRef(excursionId).doc(passenger.id);
-
-    return _firestore.runTransaction((transaction) async {
-      final passengerSnapshot = await transaction.get(passengerDocRef);
-
-      // Limpamos o mapa do passageiro também
-      final pData = _cleanMap(passenger.toMap());
-
-      transaction.set(passengerDocRef, pData, SetOptions(merge: true));
-
-      if (!passengerSnapshot.exists) {
-        transaction.update(_excursionsRef.doc(excursionId), {
-          'assentosReservados': FieldValue.increment(1),
-        });
-      }
-    });
+  /// Adiciona uma nova despesa a uma excursão.
+  Future<void> addExpense(String excursionId, Expense expense) async {
+    await _expensesRef(excursionId).add(_cleanMap(expense.toMap()));
   }
 
-  Future<void> updateCheckinStatus({
-    required String excursionId,
-    required String passengerId,
-    required Map<String, dynamic> checkinData,
-  }) async {
-    try {
-      final cleanData = _cleanMap(checkinData);
-      await _vagasRef(excursionId).doc(passengerId).update(cleanData);
-    } catch (e) {
-      rethrow;
-    }
+  /// Deleta uma despesa de uma excursão.
+  Future<void> deleteExpense(String excursionId, String expenseId) async {
+    await _expensesRef(excursionId).doc(expenseId).delete();
   }
 
-  // --- UTILITÁRIOS ---
+  // =========================================================================
+  // 4. UTILITÁRIO
+  // =========================================================================
 
-  /// Remove valores nulos do Map para evitar o erro:
-  /// "type 'List<Object?>' is not a subtype of type 'PigeonUserDetails?'"
+  /// Remove chaves com valores nulos de um mapa para evitar erros no Firestore.
   Map<String, dynamic> _cleanMap(Map<String, dynamic> data) {
-    final Map<String, dynamic> clean = {};
-    data.forEach((key, value) {
-      if (value != null) {
-        clean[key] = value;
-      }
-    });
-    return clean;
+    data.removeWhere((key, value) => value == null);
+    return data;
   }
 }

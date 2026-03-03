@@ -1,153 +1,133 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart'; // Para kDebugMode
 import '../models/passenger.dart';
 
 class PassengerRepository {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+
+  // Getter para o UID com log de verificação
+  String get _currentUserId {
+    final uid = _auth.currentUser?.uid ?? "";
+    if (uid.isEmpty) {
+      debugPrint("⚠️ REPOSITORY: Ninguém logado no Firebase Auth.");
+    }
+    return uid;
+  }
 
   CollectionReference<Map<String, dynamic>> get _collection =>
       _firestore.collection('passageiros');
 
-  /// 1. CADASTRO GERAL (Sem obrigatoriedade de excursão)
-  /// Salva o passageiro na base mestre da empresa
+  // ===========================================================================
+  // 1. GESTÃO DE CADASTRO (CRM - BASE MESTRE)
+  // ===========================================================================
+
   Future<String> savePassenger(Passenger passenger) async {
     try {
+      final uid = _currentUserId;
+      if (uid.isEmpty) throw Exception("Usuário não autenticado.");
+
       final docRef = passenger.id.isEmpty
           ? _collection.doc()
           : _collection.doc(passenger.id);
 
       final data = passenger.toMap();
       data['id'] = docRef.id;
+      data['userId'] = uid; // Garante o vínculo com o dono
       data['lastUpdate'] = FieldValue.serverTimestamp();
 
       if (passenger.id.isEmpty) {
         data['createdAt'] = FieldValue.serverTimestamp();
-        data['totalViagens'] = 0; // Inicializa contador de fidelidade
+        data['totalViagens'] = 0;
+        data['excursaoId'] = null;
       }
 
+      debugPrint("💾 REPOSITORY: Salvando passageiro ${docRef.id} para o usuário $uid");
       await docRef.set(data, SetOptions(merge: true));
       return docRef.id;
     } catch (e) {
-      throw _handleError("salvar cadastro base", e);
+      debugPrint("❌ REPOSITORY ERROR (save): $e");
+      throw _handleError("salvar cadastro", e);
     }
   }
 
-  /// 2. REGRA DE NEGÓCIO: VINCULAR A EXCURSÃO COM SINAL
-  /// Esta regra agora fica no repositório para garantir integridade
-  Future<void> linkToExcursion({
-    required String passengerId,
-    required String excursionId,
-    required double depositValue,
-  }) async {
+  Stream<List<Passenger>> getGlobalPassengersStream() {
+    final uid = _currentUserId;
+
+    if (uid.isEmpty) {
+      debugPrint("🛑 REPOSITORY: Stream abortada. UserID vazio.");
+      return Stream.value([]);
+    }
+
+    debugPrint("📡 REPOSITORY: Iniciando Stream para o usuário: $uid");
+
+    return _collection
+        .where('userId', isEqualTo: uid)
+        .orderBy('nome')
+        .snapshots()
+        .map((snapshot) {
+      debugPrint("✅ REPOSITORY: Snapshot recebido com ${snapshot.docs.length} documentos.");
+
+      return snapshot.docs.map((doc) {
+        try {
+          return Passenger.fromMap(doc.id, doc.data());
+        } catch (e) {
+          debugPrint("❌ REPOSITORY ERROR (fromMap): Erro no documento ${doc.id}: $e");
+          // Retorna um passageiro "dummy" para não quebrar a lista inteira por causa de um erro
+          return Passenger(
+              id: doc.id,
+              name: "Erro de Dados (${doc.id})",
+              document: "",
+              phone: "",
+              birthDate: DateTime.now()
+          );
+        }
+      }).toList();
+    })
+        .handleError((error) {
+      debugPrint("🔥 REPOSITORY STREAM CRITICAL ERROR: $error");
+      // Se o erro for de índice, ele aparecerá aqui com o link para criar.
+      return <Passenger>[];
+    });
+  }
+
+  Future<Passenger?> getPassengerById(String passengerId) async {
     try {
-      // Validação da Regra de Negócio: Exige sinal maior que zero
-      if (depositValue <= 0) {
-        throw Exception("O pagamento do sinal é obrigatório para vincular à excursão.");
+      final doc = await _collection.doc(passengerId).get();
+      if (!doc.exists) return null;
+
+      final data = doc.data();
+      if (data?['userId'] != _currentUserId) {
+        debugPrint("🚫 REPOSITORY: Tentativa de acesso negada a passageiro de outro usuário.");
+        return null;
       }
 
-      await _collection.doc(passengerId).update({
-        'excursionId': excursionId,
-        'depositValue': depositValue,
-        'statusViagem': 'confirmada', // Status ativo
-        'dataVinculo': FieldValue.serverTimestamp(),
-      });
+      return Passenger.fromMap(doc.id, data!);
     } catch (e) {
-      throw _handleError("vincular passageiro à excursão", e);
+      debugPrint("❌ REPOSITORY ERROR (getById): $e");
+      throw _handleError("buscar passageiro por ID", e);
     }
   }
 
-  /// 3. BUSCA DE TODOS OS PASSAGEIROS DA EMPRESA (Geral)
-  /// Usado na tela principal de passageiros para ver quem tem viagem ativa ou não
-  Future<List<Passenger>> getAllPassengers() async {
+  Future<void> updateMasterData(String passengerId, Map<String, dynamic> data) async {
     try {
-      final snapshot = await _collection.orderBy('nome').get();
-      return snapshot.docs
-          .map((doc) => Passenger.fromMap(doc.id, doc.data()))
-          .toList();
+      await _collection.doc(passengerId).update(data);
     } catch (e) {
-      throw _handleError("buscar todos os passageiros", e);
-    }
-  }
-
-  /// 4. BUSCA POR EXCURSÃO (Filtro específico)
-  Stream<List<Passenger>> getPassengersStream(String excursionId) {
-    return _collection
-        .where('excursionId', isEqualTo: excursionId)
-        .snapshots()
-        .map((snapshot) => snapshot.docs
-        .map((doc) => Passenger.fromMap(doc.id, doc.data()))
-        .toList());
-  }
-  /// Atualiza o status de embarque e registra o agente responsável
-  Future<void> updateBoardingStatus({
-    required String passengerId,
-    required String statusValue,
-    required String agenteId,
-  }) async {
-    try {
-      await _collection.doc(passengerId).update({
-        'statusEmbarque': statusValue,
-        'agenteResponsavel': agenteId,
-        'atualizadoEm': FieldValue.serverTimestamp(),
-      });
-    } catch (e) {
-      throw _handleError("atualizar status de embarque", e);
-    }
-  }
-
-  /// Busca a lista de passageiros de uma excursão específica (Future)
-  Future<List<Passenger>> getPassengers(String excursionId) async {
-    try {
-      final snapshot = await _collection
-          .where('excursionId', isEqualTo: excursionId)
-          .get();
-
-      return snapshot.docs
-          .map((doc) => Passenger.fromMap(doc.id, doc.data()))
-          .toList();
-    } catch (e) {
-      throw _handleError("buscar passageiros da excursão", e);
-    }
-  }
-
-  /// 5. ATUALIZAR STATUS DE EMBARQUE E CONTADOR DE VIAGENS
-  /// Quando o passageiro embarca/finaliza, podemos incrementar o totalViagens
-  Future<void> completeTrip(String passengerId) async {
-    try {
-      await _collection.doc(passengerId).update({
-        'totalViagens': FieldValue.increment(1),
-        'excursionId': null, // Libera para próxima viagem
-        'statusViagem': 'finalizada',
-      });
-    } catch (e) {
-      throw _handleError("finalizar viagem", e);
-    }
-  }
-
-  // --- Métodos de Apoio Mantidos ---
-
-  Future<void> updatePassengerSeat(String passengerId, String? seatNumber) async {
-    try {
-      await _collection.doc(passengerId).update({
-        'seatNumber': seatNumber,
-        'atualizadoEm': FieldValue.serverTimestamp(),
-      });
-    } catch (e) {
-      throw _handleError("atualizar assento", e);
+      throw _handleError("atualizar dados mestre", e);
     }
   }
 
   Future<void> deletePassenger(String passengerId) async {
     try {
       await _collection.doc(passengerId).delete();
+      debugPrint("🗑️ REPOSITORY: Passageiro $passengerId removido permanentemente.");
     } catch (e) {
       throw _handleError("remover passageiro", e);
     }
   }
 
   Exception _handleError(String acao, dynamic e) {
-    if (e is FirebaseException && e.code == 'permission-denied') {
-      return Exception("Erro de permissão: Verifique as regras ou índices.");
-    }
-    return Exception("Falha ao $acao: $e");
+    return Exception("Erro ao $acao: $e");
   }
 }
