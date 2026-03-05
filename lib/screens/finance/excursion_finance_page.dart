@@ -342,7 +342,7 @@ class _ExcursionFinancePageState extends State<ExcursionFinancePage> {
             const SizedBox(height: 16),
 
             DropdownButtonFormField<String>(
-              value: categoria,
+              initialValue: categoria,
               dropdownColor: AppTheme.cardColor,
               items: [
                 'Transporte',

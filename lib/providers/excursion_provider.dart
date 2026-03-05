@@ -3,12 +3,11 @@ import 'package:flutter/material.dart';
 import '../models/excursion.dart';
 import '../models/enums.dart';
 import '../models/expense.dart';
-import '../repositories/excursion_repository.dart';
 import '../services/excursion_service.dart';
+import '../repositories/excursion_repository.dart'; // Mantido temporariamente apenas pro construtor default
 
 class ExcursionProvider with ChangeNotifier {
   final ExcursionService _service;
-  final ExcursionRepository _repository;
 
   // --- ESTADO INTERNO ---
   List<Excursion> _excursions = [];
@@ -26,9 +25,8 @@ class ExcursionProvider with ChangeNotifier {
       ex.status == ExcursionStatus.emAndamento)
       .toList();
 
-  ExcursionProvider({ExcursionService? service, ExcursionRepository? repository})
-      : _repository = repository ?? ExcursionRepository(),
-        _service = service ?? ExcursionService(ExcursionRepository());
+  ExcursionProvider({ExcursionService? service})
+      : _service = service ?? ExcursionService(ExcursionRepository());
 
   // =========================================================================
   // SINCRONIZAÇÃO EM TEMPO REAL
@@ -53,7 +51,7 @@ class ExcursionProvider with ChangeNotifier {
     _excursionSubscription?.cancel();
 
     _excursionSubscription =
-        _repository.watchExcursions(responsibleId: uid).listen(
+        _service.watchExcursions(responsibleId: uid).listen(
               (data) {
             debugPrint("[ExcursionProvider] ✅ Recebidas ${data.length} excursões do Firebase.");
             _excursions = data;

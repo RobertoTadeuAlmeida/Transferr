@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import '../models/user.dart';
 import '../repositories/user_repository.dart';
 import '../services/auth_service.dart';
+// Mantido só para injeção
 
 class AuthProvider with ChangeNotifier {
   final AuthService _authService;
-  final UserRepository _authRepo;
 
   User? _currentUser;
 
@@ -18,18 +18,16 @@ class AuthProvider with ChangeNotifier {
 
   String? get errorMessage => _errorMessage;
 
-
-  AuthProvider({AuthService? service, UserRepository? repo})
-    : _authRepo = repo ?? UserRepository(),
-      _authService = service ?? AuthService(UserRepository()) {
+  AuthProvider({AuthService? service})
+    : _authService = service ?? AuthService(UserRepository()) {
     _init();
   }
 
   Future<void> _init() async {
-    _authRepo.authStateChanges.listen((fb_user) async {
-      if (fb_user != null) {
+    _authService.authStateChanges.listen((fbUser) async {
+      if (fbUser != null) {
         // Busca os dados completos no Firestore quando o Firebase Auth detectar o login
-        _currentUser = await _authRepo.getUserData(fb_user.uid);
+        _currentUser = await _authService.getUserData(fbUser.uid);
       } else {
         _currentUser = null;
       }
@@ -63,7 +61,7 @@ class AuthProvider with ChangeNotifier {
 
   /// Logout
   Future<void> logout() async {
-    await _authRepo.signOut();
+    await _authService.logout();
     notifyListeners();
   }
 

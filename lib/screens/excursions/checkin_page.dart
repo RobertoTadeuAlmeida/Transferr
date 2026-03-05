@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../models/excursion.dart';
 import '../../models/passenger.dart';
 import '../../models/enums.dart';
 import '../../providers/passenger_provider.dart';

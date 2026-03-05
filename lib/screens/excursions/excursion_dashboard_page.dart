@@ -70,7 +70,7 @@ class ExcursionDashboardPage extends StatelessWidget {
                 title: "Lista de Passageiros",
                 // Subtítulo atualizado para mostrar a saúde financeira da viagem
                 subtitle:
-                    "$paidInFullCount de ${passengers.length} passagens quitadas",
+                    "$paidInFullCount de ${passengers.length} passagens pagas",
                 icon: Icons.people_alt_rounded,
                 color: Colors.blue,
                 onTap: () => Navigator.push(

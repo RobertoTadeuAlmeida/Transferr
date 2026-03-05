@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:transferr/config/theme/app_theme.dart';
 import 'package:transferr/models/passenger.dart';
 import 'package:transferr/providers/passenger_provider.dart';
+import 'package:transferr/providers/excursion_provider.dart';
 
 class ExcursionSeatMapPage extends StatefulWidget {
   final String excursionId;
@@ -411,12 +412,16 @@ class _ExcursionSeatMapPageState extends State<ExcursionSeatMapPage> {
                           p.document.isEmpty ? "Sem documento" : p.document,
                         ),
                         onTap: () async {
+                          final excursion = context
+                              .read<ExcursionProvider>()
+                              .excursions
+                              .firstWhere((e) => e.id == widget.excursionId);
                           final success = await provider.linkExistingPassenger(
                             context: context,
                             passengerId: p.id,
                             excursionId: widget.excursionId,
                             depositValue: 0,
-                            totalValue: 0,
+                            totalValue: excursion.basePrice,
                             seatNumber: selectedSeat,
                           );
                           print("passageiro add ao provider $success");

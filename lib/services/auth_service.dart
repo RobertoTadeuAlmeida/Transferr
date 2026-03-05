@@ -7,6 +7,19 @@ class AuthService {
 
   AuthService(this._userRepo);
 
+  /// Expõe a stream de estado de autenticação
+  Stream<fb_auth.User?> get authStateChanges => _userRepo.authStateChanges;
+
+  /// Busca os dados completos do usuário
+  Future<User?> getUserData(String uid) {
+    return _userRepo.getUserData(uid);
+  }
+
+  /// Desloga o usuário
+  Future<void> logout() {
+    return _userRepo.signOut();
+  }
+
   /// Orquestra o Cadastro Completo: Auth + Firestore + Metadados + Rollback
   Future<void> register(User user, String password) async {
     fb_auth.UserCredential? userCredential;

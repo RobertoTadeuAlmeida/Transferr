@@ -10,6 +10,18 @@ class PassengerService {
   PassengerService(this._passengerRepo);
 
   // ===========================================================================
+  // CONSULTA E GESTÃO GLOBAL (CRM)
+  // ===========================================================================
+
+  Stream<List<Passenger>> getGlobalPassengersStream() {
+    return _passengerRepo.getGlobalPassengersStream();
+  }
+
+  Future<void> deletePassenger(String passengerId) async {
+    return _passengerRepo.deletePassenger(passengerId);
+  }
+
+  // ===========================================================================
   // SALVAMENTO COMPLETO (CRM + VAGA)
   // ===========================================================================
 
@@ -52,7 +64,7 @@ class PassengerService {
 
         // Buscamos a excursão para saber o valor total (opcional, dependendo da sua lógica)
         final excursionDoc = await excursionRef.get();
-        final double totalValue = (excursionDoc.data()?['valor'] ?? 0.0)
+        final double totalValue = (excursionDoc.data()?['precoBase'] ?? 0.0)
             .toDouble();
         final bool isFullyPaid = (depositValue ?? 0.0) >= totalValue;
 

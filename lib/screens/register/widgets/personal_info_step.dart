@@ -29,8 +29,11 @@ class PersonalInfoStep extends StatelessWidget {
             const Icon(Icons.business, size: 64, color: Colors.blue),
             const SizedBox(height: 24),
             DropdownButtonFormField<String>(
-              value: selectedProfile,
-              decoration: const InputDecoration(labelText: 'Seu Perfil', border: OutlineInputBorder()),
+              initialValue: selectedProfile,
+              decoration: const InputDecoration(
+                labelText: 'Seu Perfil',
+                border: OutlineInputBorder(),
+              ),
               items: const [
                 DropdownMenuItem(value: 'ADMIN', child: Text("Administrador")),
                 DropdownMenuItem(value: 'AGENTE', child: Text("Agente / Guia")),
@@ -40,7 +43,10 @@ class PersonalInfoStep extends StatelessWidget {
             const SizedBox(height: 16),
             TextFormField(
               controller: controllers['company'],
-              decoration: const InputDecoration(labelText: 'Nome da Empresa', border: OutlineInputBorder()),
+              decoration: const InputDecoration(
+                labelText: 'Nome da Empresa',
+                border: OutlineInputBorder(),
+              ),
               validator: (v) => v!.isEmpty ? 'Obrigatório' : null,
             ),
             const SizedBox(height: 16),
@@ -48,13 +54,19 @@ class PersonalInfoStep extends StatelessWidget {
               controller: controllers['document'],
               inputFormatters: [maskCpf],
               keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'CPF do Responsável', border: OutlineInputBorder()),
+              decoration: const InputDecoration(
+                labelText: 'CPF do Responsável',
+                border: OutlineInputBorder(),
+              ),
               validator: (v) => v!.length < 14 ? 'CPF inválido' : null,
             ),
             const SizedBox(height: 16),
             TextFormField(
               controller: controllers['name'],
-              decoration: const InputDecoration(labelText: 'Seu Nome Completo', border: OutlineInputBorder()),
+              decoration: const InputDecoration(
+                labelText: 'Seu Nome Completo',
+                border: OutlineInputBorder(),
+              ),
               validator: (v) => v!.isEmpty ? 'Obrigatório' : null,
             ),
             const SizedBox(height: 16),
@@ -62,7 +74,10 @@ class PersonalInfoStep extends StatelessWidget {
               controller: controllers['phone'],
               inputFormatters: [maskPhone],
               keyboardType: TextInputType.phone,
-              decoration: const InputDecoration(labelText: 'WhatsApp', border: OutlineInputBorder()),
+              decoration: const InputDecoration(
+                labelText: 'WhatsApp',
+                border: OutlineInputBorder(),
+              ),
               validator: (v) => v!.length < 14 ? 'Telefone inválido' : null,
             ),
           ],

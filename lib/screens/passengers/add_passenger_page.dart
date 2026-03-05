@@ -87,18 +87,23 @@ class _AddPassengerPageState extends State<AddPassengerPage> {
   }
 
   bool _isValidCPF(String cpf) {
-    if (cpf.length != 11 || RegExp(r'^(\d)\1{10}$').hasMatch(cpf)) return false;List<int> numbers = cpf.split('').map(int.parse).toList();
+    if (cpf.length != 11 || RegExp(r'^(\d)\1{10}$').hasMatch(cpf)) return false;
+    List<int> numbers = cpf.split('').map(int.parse).toList();
 
     // Cálculo do primeiro dígito verificador
     int sum = 0;
-    for (int i = 0; i < 9; i++) sum += numbers[i] * (10 - i);
+    for (int i = 0; i < 9; i++) {
+      sum += numbers[i] * (10 - i);
+    }
     int res = sum % 11;
     int digit1 = res < 2 ? 0 : 11 - res;
     if (numbers[9] != digit1) return false;
 
     // Cálculo do segundo dígito verificador
     sum = 0;
-    for (int i = 0; i < 10; i++) sum += numbers[i] * (11 - i);
+    for (int i = 0; i < 10; i++) {
+      sum += numbers[i] * (11 - i);
+    }
     res = sum % 11;
     int digit2 = res < 2 ? 0 : 11 - res;
     if (numbers[10] != digit2) return false;
@@ -110,8 +115,9 @@ class _AddPassengerPageState extends State<AddPassengerPage> {
     final today = DateTime.now();
     int age = today.year - birthDate.year;
     if (today.month < birthDate.month ||
-        (today.month == birthDate.month && today.day < birthDate.day))
+        (today.month == birthDate.month && today.day < birthDate.day)) {
       age--;
+    }
     setState(() => _isMinor = age < 18);
   }
 
@@ -300,7 +306,6 @@ class _AddPassengerPageState extends State<AddPassengerPage> {
                                   'excursionId': widget.excursionId,
                                   'currentSeat': _seatController.text,
                                   'isSelectionMode': true,
-
                                 },
                               );
 

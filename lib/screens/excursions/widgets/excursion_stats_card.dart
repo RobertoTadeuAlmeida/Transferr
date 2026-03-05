@@ -23,6 +23,10 @@ class ExcursionStatsCard extends StatelessWidget {
     double reservationProgress = (reservedSeats / safeTotal).clamp(0.0, 1.0);
     double paymentProgress = (paidInFullCount / safeTotal).clamp(0.0, 1.0);
 
+    final int pendingSeats = reservedSeats > paidInFullCount
+        ? reservedSeats - paidInFullCount
+        : 0;
+
     return Card(
       elevation: 4,
       margin: const EdgeInsets.all(8),
@@ -35,8 +39,16 @@ class ExcursionStatsCard extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
                 _buildStatItem("Total Vagas", "$totalSeats", Colors.blueAccent),
-                _buildStatItem("Reservas", "$reservedSeats", AppTheme.primaryColor),
-                _buildStatItem("Pagos", "$paidInFullCount", AppTheme.successColor),
+                _buildStatItem(
+                  "Pendentes",
+                  "$pendingSeats",
+                  AppTheme.primaryColor,
+                ),
+                _buildStatItem(
+                  "Pagos",
+                  "$paidInFullCount",
+                  AppTheme.successColor,
+                ),
               ],
             ),
             const SizedBox(height: 20),
@@ -60,7 +72,6 @@ class ExcursionStatsCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(7),
                 ),
 
-
                 // Fica por cima da laranja. Se todos pagarem, a barra fica toda verde.
                 LinearProgressIndicator(
                   value: paymentProgress,
@@ -80,7 +91,10 @@ class ExcursionStatsCard extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    _buildLegendItem("Reservado", AppTheme.primaryColor.withValues(alpha: 0.6)),
+                    _buildLegendItem(
+                      "Pendente",
+                      AppTheme.primaryColor.withValues(alpha: 0.6),
+                    ),
                     const SizedBox(width: 12),
                     _buildLegendItem("Pagos", AppTheme.successColor),
                   ],
@@ -94,7 +108,7 @@ class ExcursionStatsCard extends StatelessWidget {
                   ),
                 ),
               ],
-            )
+            ),
           ],
         ),
       ),

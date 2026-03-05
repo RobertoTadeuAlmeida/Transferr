@@ -32,8 +32,9 @@ class PassengerDetailsPage extends StatelessWidget {
           ? context.read<PassengerProvider>().watchPassengers(excursionId!)
           : context.read<PassengerProvider>().globalPassengersStream,
       builder: (context, snapshot) {
-        if (snapshot.hasError)
+        if (snapshot.hasError) {
           return const Center(child: Text("Erro ao carregar dados"));
+        }
 
         // Localiza o passageiro atualizado na stream para manter a reatividade total (ex: poltrona, status, pagamento)
         final currentPassenger =

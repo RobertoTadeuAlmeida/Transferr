@@ -24,12 +24,18 @@ class ExcursionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final textTheme = theme.textTheme;
-    final currencyFormat = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
+    final currencyFormat = NumberFormat.currency(
+      locale: 'pt_BR',
+      symbol: 'R\$',
+    );
 
     // Cálculos de Progresso
+
     final int total = excursion.totalSeats;
-    final double percentReservas = total > 0
-        ? (excursion.reservedSeats / total).clamp(0.0, 1.0)
+    int pendingSeats = excursion.reservedSeats - excursion.paidSeats;
+
+    final double percentPendentes = total > 0
+        ? (pendingSeats / total).clamp(0.0, 1.0)
         : 0.0;
     final double percentPagos = total > 0
         ? (excursion.paidSeats / total).clamp(0.0, 1.0)
@@ -85,7 +91,9 @@ class ExcursionCard extends StatelessWidget {
 
               _buildInfoRow(
                 Icons.calendar_today_outlined,
-                DateFormat("'Partida:' dd/MM/yyyy 'às' HH:mm").format(excursion.startDate),
+                DateFormat(
+                  "'Partida:' dd/MM/yyyy 'às' HH:mm",
+                ).format(excursion.startDate),
                 theme,
               ),
 
@@ -93,10 +101,10 @@ class ExcursionCard extends StatelessWidget {
 
               // --- DUAS BARRAS DE PROGRESSO ---
               _buildProgressBar(
-                label: "Reservas (Ocupação)",
-                percent: percentReservas,
-                color: excursion.isFull ? AppTheme.errorColor : AppTheme.primaryColor,
-                count: "${excursion.reservedSeats}/$total",
+                label: "Pendentes (Sem Pagamento Total)",
+                percent: percentPendentes,
+                color: AppTheme.primaryColor,
+                count: "$pendingSeats/$total",
                 textTheme: textTheme,
               ),
               const SizedBox(height: 12),
@@ -119,7 +127,10 @@ class ExcursionCard extends StatelessWidget {
                     children: [
                       Text(
                         'FATURAMENTO PREVISTO',
-                        style: textTheme.labelSmall?.copyWith(color: Colors.grey, fontSize: 9),
+                        style: textTheme.labelSmall?.copyWith(
+                          color: Colors.grey,
+                          fontSize: 9,
+                        ),
                       ),
                       Text(
                         currencyFormat.format(excursion.faturamentoPrevisto),
@@ -133,12 +144,20 @@ class ExcursionCard extends StatelessWidget {
                   Row(
                     children: [
                       IconButton(
-                        onPressed: () => Navigator.pushNamed(context, '/excursion-finance', arguments: excursion),
+                        onPressed: () => Navigator.pushNamed(
+                          context,
+                          '/excursion-finance',
+                          arguments: excursion,
+                        ),
                         icon: const Icon(Icons.analytics_outlined),
                         color: AppTheme.successColor,
                         style: IconButton.styleFrom(
-                          backgroundColor: AppTheme.successColor.withValues(alpha: 0.1),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          backgroundColor: AppTheme.successColor.withValues(
+                            alpha: 0.1,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -168,8 +187,20 @@ class ExcursionCard extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(label, style: textTheme.labelSmall?.copyWith(color: Colors.white54, fontSize: 10)),
-            Text(count, style: textTheme.labelSmall?.copyWith(fontWeight: FontWeight.bold, color: color)),
+            Text(
+              label,
+              style: textTheme.labelSmall?.copyWith(
+                color: Colors.white54,
+                fontSize: 10,
+              ),
+            ),
+            Text(
+              count,
+              style: textTheme.labelSmall?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 6),
@@ -209,13 +240,24 @@ class ExcursionCard extends StatelessWidget {
       ),
       child: Text(
         label,
-        style: TextStyle(color: color, fontSize: 8, fontWeight: FontWeight.bold),
+        style: TextStyle(
+          color: color,
+          fontSize: 8,
+          fontWeight: FontWeight.bold,
+        ),
       ),
     );
   }
 
-  Widget _buildInfoRow(IconData icon, String text, ThemeData theme, {Color? color}) {
-    final defaultColor = theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.7);
+  Widget _buildInfoRow(
+    IconData icon,
+    String text,
+    ThemeData theme, {
+    Color? color,
+  }) {
+    final defaultColor = theme.textTheme.bodyMedium?.color?.withValues(
+      alpha: 0.7,
+    );
     return Row(
       children: [
         Icon(icon, size: 16, color: color ?? defaultColor),
@@ -223,7 +265,10 @@ class ExcursionCard extends StatelessWidget {
         Expanded(
           child: Text(
             text,
-            style: theme.textTheme.bodyMedium?.copyWith(color: color ?? defaultColor, fontSize: 13),
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: color ?? defaultColor,
+              fontSize: 13,
+            ),
             overflow: TextOverflow.ellipsis,
           ),
         ),

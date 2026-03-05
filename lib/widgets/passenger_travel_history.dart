@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/excursion_provider.dart';
 import '../screens/excursions/widgets/excursion_card.dart';
-import '../../config/theme/app_theme.dart';
 
 class PassengerTravelHistory extends StatelessWidget {
   final String passengerId;
@@ -49,7 +48,11 @@ class PassengerTravelHistory extends StatelessWidget {
       padding: const EdgeInsets.all(32.0),
       child: Column(
         children: [
-          Icon(Icons.map_outlined, size: 48, color: theme.disabledColor.withAlpha(50)),
+          Icon(
+            Icons.map_outlined,
+            size: 48,
+            color: theme.disabledColor.withAlpha(50),
+          ),
           const SizedBox(height: 16),
           Text(
             'Este passageiro ainda não realizou viagens.',

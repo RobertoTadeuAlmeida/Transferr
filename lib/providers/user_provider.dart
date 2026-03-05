@@ -1,11 +1,12 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../models/user.dart';
-import '../repositories/user_repository.dart'; // Agora aponta para o unificado
+import '../services/user_service.dart';
+import '../repositories/user_repository.dart'; // Apenas para o default
 
 class UserProvider with ChangeNotifier {
-  // Injeção do repositório unificado
-  final UserRepository _repository;
+  // Injeção do service
+  final UserService _service;
 
   // Inscrição para a stream (Real-time)
   StreamSubscription? _userSubscription;
@@ -17,9 +18,9 @@ class UserProvider with ChangeNotifier {
   String _searchTerm = '';
 
   // --- CONSTRUTOR ---
-  // Permitimos passar o repositório para facilitar testes unitários no futuro
-  UserProvider({UserRepository? repository})
-      : _repository = repository ?? UserRepository() {
+  // Permitimos passar o service para facilitar testes unitários no futuro
+  UserProvider({UserService? service})
+      : _service = service ?? UserService(UserRepository()) {
     _initUserStream();
   }
 
@@ -53,7 +54,7 @@ class UserProvider with ChangeNotifier {
     _isLoading = true;
     _userSubscription?.cancel();
 
-    _userSubscription = _repository.getUsersStream().listen(
+    _userSubscription = _service.getUsersStream().listen(
           (userList) {
         _allUsers = userList;
         _isLoading = false;
@@ -76,10 +77,10 @@ class UserProvider with ChangeNotifier {
 
   // --- OPERAÇÕES ---
 
-  /// Salva ou atualiza um usuário (usando o método unificado saveUserData)
+  /// Salva ou atualiza um usuário (usando o UserService)
   Future<void> saveUser(User user) async {
     try {
-      await _repository.saveUserData(user);
+      await _service.saveUserData(user);
     } catch (e) {
       _error = 'Erro ao salvar usuário.';
       notifyListeners();
@@ -90,7 +91,7 @@ class UserProvider with ChangeNotifier {
   /// Ativa/Desativa o usuário (Soft Delete)
   Future<void> toggleUserStatus(String userId, bool currentStatus) async {
     try {
-      await _repository.toggleUserStatus(userId, !currentStatus);
+      await _service.toggleUserStatus(userId, !currentStatus);
     } catch (e) {
       _error = 'Erro ao alterar status.';
       notifyListeners();

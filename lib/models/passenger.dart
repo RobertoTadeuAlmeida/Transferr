@@ -77,7 +77,7 @@ class Passenger {
       'nascimento': Timestamp.fromDate(birthDate),
       'ehMenor': isMinor,
       'poltrona': seatNumber,
-      'excursaoId': excursionId,
+      'excursaoId': excursionId.isEmpty ? null : excursionId,
       'statusEmbarque': statusEmbarque.value,
       'agenteResponsavel': agenteResponsavel,
       'ultimaParada': ultimaParada,
@@ -97,7 +97,7 @@ class Passenger {
       phone: map['telefone'] ?? '',
       birthDate: (map['nascimento'] as Timestamp?)?.toDate() ?? DateTime.now(),
       isMinor: map['ehMenor'] ?? false,
-      excursionId: map['excursaoId'] ?? '',
+      excursionId: map['excursaoId'] ?? map['excursionId'] ?? '',
       seatNumber: map['poltrona'] ?? '',
       statusEmbarque: BoardingStatus.fromString(map['statusEmbarque']),
       agenteResponsavel: map['agenteResponsavel'],
@@ -171,12 +171,7 @@ class Guardian {
   });
 
   Map<String, dynamic> toMap() {
-    return {
-      'id': id,
-      'nome': name,
-      'documento': document,
-      'telefone': phone,
-    };
+    return {'id': id, 'nome': name, 'documento': document, 'telefone': phone};
   }
 
   factory Guardian.fromMap(Map<String, dynamic> map) {

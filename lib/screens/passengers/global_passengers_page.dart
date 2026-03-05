@@ -154,12 +154,15 @@ class _GlobalPassengersPageState extends State<GlobalPassengersPage> {
               child: const Text('Confirmar'),
               onPressed: () async {
                 try {
+                  final excursion = excursionProvider.excursions.firstWhere(
+                    (e) => e.id == widget.excursionId,
+                  );
                   final success = await passengerProvider.linkExistingPassenger(
                     context: context,
                     passengerId: passenger.id,
                     excursionId: widget.excursionId!,
                     depositValue: 0.0,
-                    totalValue: widget.excursionPrice ?? 0.0,
+                    totalValue: excursion.basePrice,
                   );
 
                   if (success) {

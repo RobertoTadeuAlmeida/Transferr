@@ -5,13 +5,18 @@ import '../repositories/excursion_repository.dart';
 
 class ExcursionService {
   final ExcursionRepository _excursionRepo;
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance; // Adicionado para transações se necessário
+  final FirebaseFirestore _firestore =
+      FirebaseFirestore.instance; // Adicionado para transações se necessário
 
   ExcursionService(this._excursionRepo);
 
   // =========================================================================
   // OPERAÇÕES DE EXCURSÃO COM LÓGICA DE NEGÓCIO
   // =========================================================================
+
+  Stream<List<Excursion>> watchExcursions({String? responsibleId}) {
+    return _excursionRepo.watchExcursions(responsibleId: responsibleId);
+  }
 
   Future<void> createExcursion(Excursion excursion) async {
     return _excursionRepo.add(excursion);
@@ -33,13 +38,23 @@ class ExcursionService {
   /// Recalcula e sincroniza os contadores de assentos e pagamentos de uma excursão.
   Future<void> syncExcursionCounters(String excursionId) async {
     // Buscamos a foto atual das vagas (sub-coleção)
-    final vacanciesSnapshot = await _excursionRepo.watchVacancies(excursionId).first;
+    final vacanciesSnapshot = await _excursionRepo
+        .watchVacancies(excursionId)
+        .first;
 
-    int totalReservados = vacanciesSnapshot.docs.length;
+    int totalReservados = 0;
     int totalPagos = 0;
     double faturamentoAtual = 0;
 
     for (var doc in vacanciesSnapshot.docs) {
+      // 0. Auto-healing: Remove orphan vagas when passenger is deleted globally
+      final pDoc = await _firestore.collection('passageiros').doc(doc.id).get();
+      if (!pDoc.exists) {
+        await doc.reference.delete();
+        continue;
+      }
+
+      totalReservados++;
       final data = doc.data();
 
       // 1. Somar faturamento (dinheiro em caixa)
@@ -60,10 +75,16 @@ class ExcursionService {
     // IMPORTANTE: Os nomes das chaves aqui devem ser IGUAIS aos do Excursion.fromMap
     await _excursionRepo.update(excursionId, {
       'assentosReservados': totalReservados,
-      'assentosPagos': totalPagos, // Alterado de 'pagamentosConcluidos' para bater com o Model
+      'assentosPagos':
+          totalPagos, // Alterado de 'pagamentosConcluidos' para bater com o Model
       'faturamentoAtual': faturamentoAtual,
       'ultimaSincronizacao': FieldValue.serverTimestamp(),
     });
+  }
+
+   //4. Caucula quantos passageiros pagaram
+  int calculatePaidPassengers() {
+
   }
 
   /// Stream que calcula o faturamento total em tempo real (para Dashboard)

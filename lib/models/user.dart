@@ -7,7 +7,8 @@ class User {
   final String email;
   final String phone; // Map to 'telefone'
   final String document; // Map to 'documento' (CPF/CNPJ)
-  final String password; // Apenas para transporte temporário, não salvar no banco
+  final String
+  password; // Apenas para transporte temporário, não salvar no banco
   final DateTime birthDate; // Map to 'dataNascimento'
   final String profile; // Map to 'perfil' (ADMIN/AGENTE)
   final bool isActive;
@@ -84,7 +85,8 @@ class User {
       phone: map['telefone'] ?? '',
       document: map['documento'] ?? '',
       password: '', // Senha nunca é trafegada via Map/Banco
-      birthDate: (map['dataNascimento'] as Timestamp? ?? Timestamp.now()).toDate(),
+      birthDate: (map['dataNascimento'] as Timestamp? ?? Timestamp.now())
+          .toDate(),
       profile: map['perfil'] ?? 'AGENTE',
       isActive: map['isActive'] ?? true,
       zipCode: map['cep'] ?? '',
@@ -145,7 +147,7 @@ class User {
       neighborhood: neighborhood ?? this.neighborhood,
       city: city ?? this.city,
       state: state ?? this.state,
-      createdAt: this.createdAt,
+      createdAt: createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       deletedAt: deletedAt ?? this.deletedAt,
     );

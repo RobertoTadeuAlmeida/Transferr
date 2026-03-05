@@ -2,13 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/passenger.dart';
 import '../models/enums.dart';
-import '../repositories/passenger_repository.dart';
 import '../services/passenger_service.dart';
+import '../repositories/passenger_repository.dart'; // Apenas pro default
 import 'excursion_provider.dart';
 
 class PassengerProvider with ChangeNotifier {
   final PassengerService _service;
-  final PassengerRepository _crmRepository = PassengerRepository();
 
   bool _isLoading = false;
   bool get isLoading => _isLoading;
@@ -31,7 +30,7 @@ class PassengerProvider with ChangeNotifier {
 
   /// Stream que observa todos os passageiros do usuário logado (CRM Global)
   Stream<List<Passenger>> get globalPassengersStream =>
-      _crmRepository.getGlobalPassengersStream();
+      _service.getGlobalPassengersStream();
 
   /// Stream que observa os passageiros vinculados a uma excursão específica
   Stream<List<Passenger>> watchPassengers(String excursionId) {
@@ -133,22 +132,15 @@ class PassengerProvider with ChangeNotifier {
     _setLoading(true);
     _errorMessage = null;
     try {
-      // 1. Salva na Base Mestre (CRM)
-      final String passengerId = await _crmRepository.savePassenger(passenger);
+      // O Service agora cuida de salvar no CRM e criar a vaga se houver excursionId
+      await _service.savePassenger(
+        passenger: passenger,
+        excursionId: excursionId,
+        depositValue: depositValue,
+      );
 
-      // 2. Se houver ID de excursão, realiza o vínculo/vaga
-      if (excursionId != null && excursionId.isNotEmpty) {
-        await _service.linkToExcursion(
-          passengerId: passengerId,
-          excursionId: excursionId,
-          depositValue: depositValue ?? 0.0,
-          totalValue: totalExcursionValue ?? 0.0,
-          seatNumber: passenger.seatNumber, // Envia para validar poltrona ocupada
-        );
-
-        if (context.mounted) {
-          await context.read<ExcursionProvider>().syncExcursionStats(excursionId);
-        }
+      if (context.mounted && excursionId != null && excursionId.isNotEmpty) {
+        await context.read<ExcursionProvider>().syncExcursionStats(excursionId);
       }
 
       notifyListeners();
@@ -156,7 +148,6 @@ class PassengerProvider with ChangeNotifier {
     } catch (e) {
       _errorMessage = e.toString().replaceFirst('Exception: ', '');
       debugPrint("❌ PassengerProvider Error: $_errorMessage");
-      // Relançamos para que a UI (AddPassengerPage) capture no catch e mostre o SnackBar
       rethrow;
     } finally {
       _setLoading(false);
@@ -200,7 +191,7 @@ class PassengerProvider with ChangeNotifier {
   Future<void> deletePassenger(String passengerId) async {
     _setLoading(true);
     try {
-      await _crmRepository.deletePassenger(passengerId);
+      await _service.deletePassenger(passengerId);
       notifyListeners();
     } catch (e) {
       _errorMessage = e.toString().replaceFirst('Exception: ', '');
