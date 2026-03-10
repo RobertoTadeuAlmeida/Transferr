@@ -1,68 +1,61 @@
-# 🚌 Transferr - Gestão de Excursões e Viagens
+# 🚌 Transferr
 
-O **Transferr** é um ecossistema completo desenvolvido em Flutter para organizadores de excursões. O aplicativo permite a gestão ponta a ponta, desde o cadastro de passageiros e reserva de poltronas até o controle financeiro e check-in em tempo real durante a operação.
+O **Transferr** é um ecossistema completo para organizadores de excursões e viagens. O aplicativo permite a gestão de passageiros, alocação de poltronas, controle financeiro e check-in em tempo real.
 
 ---
 
-## ✨ Funcionalidades Principais
+### 📖 Navegação Rápida
+[📁 Documentação Técnica (DOCS.md)](DOCS.md) | [🚀 Guia de Instalação](#-como-executar) | [🛠️ Tecnologias](#️-tecnologias)
+
+---
+
+## ✨ Funcionalidades
 
 ### 📋 Gestão de Excursões
-- **Dashboard Operacional:** Visão geral do faturamento, ocupação e status da viagem.
-- **Mapa de Assentos:** Interface visual interativa para reserva e visualização de poltronas no ônibus.
-- **Controle de Despesas:** Registro e categorização de gastos (combustível, motorista, taxas) por viagem.
+- **Dashboard:** Visão consolidada de faturamento e ocupação.
+- **Mapa de Assentos:** Interface interativa para reserva de poltronas.
+- **Financeiro:** Controle de despesas e lucros por viagem.
 
-### 👥 Gestão de Passageiros (CRM)
+### 👥 CRM de Passageiros
 - **Base Global:** Cadastro único de passageiros para reutilização em múltiplas viagens.
-- **Financeiro Individual:** Sistema de baixa total ou parcial de pagamentos com indicadores de progresso.
-- **Histórico de Viagens:** Acompanhamento de todas as excursões que o passageiro participou.
+- **Controle de Quitação:** Sistema de baixa total ou parcial de passagens.
 
 ### 🚀 Operação em Tempo Real
-- **Check-in Dinâmico:** Controle de status de embarque (Aguardando, Embarcou, Parada, Desembarcou).
-- **Sincronização Cloud:** Dados atualizados instantaneamente via Firebase para todos os agentes.
+- **Check-in Dinâmico:** Controle de embarque sincronizado instantaneamente via Firebase Cloud.
 
 ---
 
-## 🛠️ Tecnologias Utilizadas
+## 🛠️ Tecnologias
 
-- **Framework:** [Flutter](https://flutter.dev/) (Android/iOS)
-- **Backend:** [Firebase](https://firebase.google.com/) (Firestore, Auth)
-- **Gerenciamento de Estado:** [Provider](https://pub.dev/packages/provider)
-- **Design:** Dark Mode personalizado focado em usabilidade noturna/estrada.
-
----
-
-## 🏗️ Arquitetura do Projeto
-
-O projeto segue uma arquitetura em camadas para garantir escalabilidade e fácil manutenção:
-1. **Models:** Representação das entidades (Excursion, Passenger, Expense, Enums).
-2. **Repositories:** Comunicação isolada com o Firebase Firestore.
-3. **Services:** Lógica de negócio, cálculos financeiros e sincronização de contadores.
-4. **Providers:** Gerenciamento de estado reativo e ponte entre lógica e UI.
-5. **Screens/Widgets:** Interface do usuário modular e componentizada.
+O projeto utiliza o estado da arte do desenvolvimento mobile:
+- **Framework:** Flutter (Android/iOS)
+- **Backend:** Firebase (Firestore & Auth)
+- **Estado:** Provider
+- **Design:** Dark Mode personalizado
 
 ---
 
-## 🚀 Como Executar o Projeto
+## 🏗️ Arquitetura
+O Transferr adota uma variação da **Clean Architecture**, dividida em:
+`Models` ➔ `Repositories` ➔ `Services` ➔ `Providers` ➔ `UI`.
+
+Para detalhes sobre a implementação técnica, consulte o [Arquivo de Documentação](DOCS.md).
+
+---
+
+## 🚀 Como Executar
 
 ### Pré-requisitos
-- Flutter SDK instalado.
-- Projeto Firebase configurado.
+- Flutter SDK & Firebase CLI.
 
-### Instalação
-1. Clone o repositório:
-   ```bash
-   git clone https://github.com/seu-usuario/transferr.git
-   ```
-2. Instale as dependências:
-   ```bash
-   flutter pub get
-   ```
-3. Execute o projeto:
-   ```bash
-   flutter run
-   ```
+### Instalação Rápida
+```bash
+git clone https://github.com/seu-usuario/transferr.git
+flutter pub get
+flutter run
+```
 
 ---
 
 ## 📄 Licença
-Este projeto está sob a licença [MIT](LICENSE).
+Projeto sob licença [MIT](LICENSE).
