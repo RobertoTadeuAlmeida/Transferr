@@ -28,9 +28,11 @@ class ExcursionRepository {
     return query
         .orderBy('dataPartida', descending: false)
         .snapshots()
-        .map((snapshot) => snapshot.docs
-        .map((doc) => Excursion.fromMap(doc.id, doc.data()))
-        .toList());
+        .map(
+          (snapshot) => snapshot.docs
+              .map((doc) => Excursion.fromMap(doc.id, doc.data()))
+              .toList(),
+        );
   }
 
   /// Adiciona um novo documento de excursão.
@@ -52,12 +54,25 @@ class ExcursionRepository {
     await batch.commit();
   }
 
+  /// Busca uma excursão pelo seu ID.
+  Future<Excursion?> getExcursionById(String excursionId) async {
+    try {
+      final doc = await _excursionsRef.doc(excursionId).get();
+      if (!doc.exists) return null;
+      return Excursion.fromMap(doc.id, doc.data()!);
+    } catch (e) {
+      throw Exception("Erro ao buscar excursão: $e");
+    }
+  }
+
   // =========================================================================
   // 2. MÉTODOS DE VAGAS (SUB-COLEÇÃO)
   // =========================================================================
 
   /// Ouve a sub-coleção de vagas de uma excursão.
-  Stream<QuerySnapshot<Map<String, dynamic>>> watchVacancies(String excursionId) {
+  Stream<QuerySnapshot<Map<String, dynamic>>> watchVacancies(
+    String excursionId,
+  ) {
     return _vagasRef(excursionId).snapshots();
   }
 
@@ -70,8 +85,11 @@ class ExcursionRepository {
     return _expensesRef(excursionId)
         .orderBy('data', descending: true)
         .snapshots()
-        .map((snap) =>
-        snap.docs.map((doc) => Expense.fromMap(doc.id, doc.data())).toList());
+        .map(
+          (snap) => snap.docs
+              .map((doc) => Expense.fromMap(doc.id, doc.data()))
+              .toList(),
+        );
   }
 
   /// Adiciona uma nova despesa a uma excursão.

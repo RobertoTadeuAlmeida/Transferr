@@ -36,7 +36,6 @@ class PassengerDetailsPage extends StatelessWidget {
           return const Center(child: Text("Erro ao carregar dados"));
         }
 
-        // Localiza o passageiro atualizado na stream para manter a reatividade total (ex: poltrona, status, pagamento)
         final currentPassenger =
             snapshot.data?.firstWhere(
               (p) => p.id == passenger.id,
@@ -173,8 +172,7 @@ class _FinancialCard extends StatelessWidget {
     );
 
     final double valorFaltante = excursion.basePrice - passenger.depositValue;
-    // Considera pago se a flag isPaid estiver true ou se o valor faltante for zero
-    final bool isTotalPaid = valorFaltante < excursion.basePrice;
+    final bool isTotalPaid = valorFaltante <= 0;
 
     return Card(
       color: isTotalPaid ? AppTheme.successColor.withValues(alpha: 0.1) : null,
@@ -252,7 +250,6 @@ class _FinancialCard extends StatelessWidget {
                 ),
               ),
 
-            // Botão de Desvincular da Excursão
             const SizedBox(height: 12),
             TextButton.icon(
               onPressed: () => _confirmUnlink(context),
@@ -319,13 +316,59 @@ class _FinancialCard extends StatelessWidget {
     );
   }
 
-  void _handlePayment(BuildContext context, double total) async {
-    await context.read<PassengerProvider>().updateOperationalData(
+  void _handlePayment(BuildContext context, double fullPrice) {
+    showDialog(
       context: context,
-      excursionId: excursionId,
-      passengerId: passenger.id,
-      depositValue: total,
-      totalValue: total,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text("Confirmar Baixa Total?"),
+        content: Text(
+          "Deseja registrar que ${passenger.name} quitou o valor total de ${formatter.format(fullPrice)}?",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text("CANCELAR"),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.successColor,
+            ),
+            onPressed: () async {
+              Navigator.pop(dialogContext);
+
+              try {
+                await context.read<PassengerProvider>().settleFullPayment(
+                      context: context,
+                      excursionId: excursionId,
+                      passengerId: passenger.id,
+                      fullValue: fullPrice,
+                    );
+
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text("Baixa total realizada com sucesso!"),
+                      backgroundColor: AppTheme.successColor,
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text("Erro ao dar baixa: $e"),
+                      backgroundColor: AppTheme.errorColor,
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                }
+              }
+            },
+            child: const Text("CONFIRMAR QUITAÇÃO"),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -340,8 +383,6 @@ class _PassengerHistorySection extends StatelessWidget {
     final history = context.watch<ExcursionProvider>().excursions.where((
       excursion,
     ) {
-      // Regra: Excursões que já aconteceram ou onde ele está/esteve
-      // Ajustar filtro conforme a necessidade do seu histórico
       return excursion.idResponsible == passengerId;
     }).toList();
 

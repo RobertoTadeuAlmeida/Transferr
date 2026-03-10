@@ -29,17 +29,14 @@ class ExcursionCard extends StatelessWidget {
       symbol: 'R\$',
     );
 
-    // Cálculos de Progresso
-
-    final int total = excursion.totalSeats;
-    int pendingSeats = excursion.reservedSeats - excursion.paidSeats;
-
-    final double percentPendentes = total > 0
-        ? (pendingSeats / total).clamp(0.0, 1.0)
-        : 0.0;
-    final double percentPagos = total > 0
-        ? (excursion.paidSeats / total).clamp(0.0, 1.0)
-        : 0.0;
+    // Cálculos de Progresso baseados nos novos campos sincronizados
+    final int total = excursion.totalSeats > 0 ? excursion.totalSeats : 1;
+    
+    // Percentual de ocupação total (Reservas)
+    final double percentOcupado = (excursion.reservedSeats / total).clamp(0.0, 1.0);
+    
+    // Percentual de quitação (Pagos Completos)
+    final double percentPagos = (excursion.paidSeats / total).clamp(0.0, 1.0);
 
     // Configuração de Status
     final (statusColor, statusIcon, statusLabel) = _getStatusConfig();
@@ -101,10 +98,10 @@ class ExcursionCard extends StatelessWidget {
 
               // --- DUAS BARRAS DE PROGRESSO ---
               _buildProgressBar(
-                label: "Pendentes (Sem Pagamento Total)",
-                percent: percentPendentes,
+                label: "Ocupação (Reservas)",
+                percent: percentOcupado,
                 color: AppTheme.primaryColor,
-                count: "$pendingSeats/$total",
+                count: "${excursion.reservedSeats}/$total",
                 textTheme: textTheme,
               ),
               const SizedBox(height: 12),

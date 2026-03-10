@@ -4,7 +4,8 @@ import '../models/excursion.dart';
 import '../models/enums.dart';
 import '../models/expense.dart';
 import '../services/excursion_service.dart';
-import '../repositories/excursion_repository.dart'; // Mantido temporariamente apenas pro construtor default
+import '../repositories/excursion_repository.dart';
+import '../repositories/passenger_repository.dart';
 
 class ExcursionProvider with ChangeNotifier {
   final ExcursionService _service;
@@ -21,12 +22,13 @@ class ExcursionProvider with ChangeNotifier {
 
   List<Excursion> get activeExcursions => _excursions
       .where((ex) =>
-  ex.status == ExcursionStatus.programada ||
-      ex.status == ExcursionStatus.emAndamento)
+          ex.status == ExcursionStatus.programada ||
+          ex.status == ExcursionStatus.emAndamento)
       .toList();
 
   ExcursionProvider({ExcursionService? service})
-      : _service = service ?? ExcursionService(ExcursionRepository());
+      : _service = service ??
+            ExcursionService(ExcursionRepository(), PassengerRepository());
 
   // =========================================================================
   // SINCRONIZAÇÃO EM TEMPO REAL
@@ -50,31 +52,51 @@ class ExcursionProvider with ChangeNotifier {
     _setLoading(true);
     _excursionSubscription?.cancel();
 
-    _excursionSubscription =
-        _service.watchExcursions(responsibleId: uid).listen(
-              (data) {
-            debugPrint("[ExcursionProvider] ✅ Recebidas ${data.length} excursões do Firebase.");
-            _excursions = data;
-            _isLoading = false;
-            notifyListeners();
-          },
-          onError: (error) {
-            debugPrint("[ExcursionProvider] ❌ Erro na Stream de Excursões: $error");
-            _setLoading(false);
-          },
-        );
+    _excursionSubscription = _service.watchExcursions(responsibleId: uid).listen(
+      (data) {
+        debugPrint(
+            "[ExcursionProvider] ✅ Recebidas ${data.length} excursões do Firebase.");
+        _excursions = data;
+        _isLoading = false;
+        notifyListeners();
+      },
+      onError: (error) {
+        debugPrint("[ExcursionProvider] ❌ Erro na Stream de Excursões: $error");
+        _setLoading(false);
+      },
+    );
   }
 
   /// Sincroniza os contadores (vagas/pagos).
-  /// Este método agora limpa as vagas de outros usuários ou deletadas.
   Future<void> syncExcursionStats(String excursionId) async {
-    debugPrint("[ExcursionProvider] 🔄 Solicitando sincronização para: $excursionId");
+    debugPrint(
+        "[ExcursionProvider] 🔄 Solicitando sincronização para: $excursionId");
     try {
-      // Chama o service que agora possui a lógica de limpeza de "vagas órfãs"
       await _service.syncExcursionCounters(excursionId);
       debugPrint("[ExcursionProvider] ✨ Sincronização de contadores finalizada.");
     } catch (e) {
       debugPrint("[ExcursionProvider] ❌ Erro ao sincronizar estatísticas: $e");
+    }
+  }
+
+  /// Calcula o progresso de pagamento de um passageiro e atualiza os totais.
+  /// Retorna os dados para uso imediato (ex: LinearProgressIndicator).
+  Future<Map<String, dynamic>> refreshPassengerPaymentProgress(
+    String passengerId,
+    String excursionId,
+  ) async {
+    debugPrint(
+        "[ExcursionProvider] 💰 Calculando progresso de pagamento: $passengerId");
+    try {
+      final result = await _service.calculatePassengerPaymentProgress(
+        passengerId,
+        excursionId,
+      );
+      // A Stream de excursões detectará a mudança nos contadores e atualizará a UI automaticamente.
+      return result;
+    } catch (e) {
+      debugPrint("[ExcursionProvider] ❌ Erro ao calcular progresso: $e");
+      rethrow;
     }
   }
 
@@ -132,7 +154,8 @@ class ExcursionProvider with ChangeNotifier {
     required double value,
     required String category,
   }) async {
-    debugPrint("[ExcursionProvider] 💸 Adicionando despesa de R\$ $value em $excursionId");
+    debugPrint(
+        "[ExcursionProvider] 💸 Adicionando despesa de R\$ $value em $excursionId");
     try {
       final newExpense = Expense(
         id: '',
@@ -175,7 +198,6 @@ class ExcursionProvider with ChangeNotifier {
   void _setLoading(bool value) {
     if (_isLoading == value) return;
     _isLoading = value;
-    // Uso do microtask para evitar erros de "setState/markNeedsBuild during build"
     Future.microtask(() => notifyListeners());
   }
 

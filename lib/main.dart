@@ -22,7 +22,7 @@ import 'package:transferr/screens/excursions/checkin_page.dart';
 import 'package:transferr/screens/passengers/add_passenger_page.dart';
 import 'package:transferr/screens/passengers/global_passengers_page.dart';
 import 'package:transferr/screens/passengers/passengers_list_page.dart';
-import 'package:transferr/screens/passengers/passenger_details_page.dart'; // Importado
+import 'package:transferr/screens/passengers/passenger_details_page.dart';
 import 'package:transferr/screens/settings/settings_page.dart';
 import 'package:transferr/screens/finance/finance_page.dart';
 import 'package:transferr/screens/users/users_list_page.dart';
@@ -59,14 +59,9 @@ class MyApp extends StatelessWidget {
       initialRoute: '/',
 
       routes: {
-        // --- Fluxo de Autenticação ---
         '/': (context) => const AuthWrapper(),
         '/register': (context) => const RegistrationPage(),
-
-        // --- Painel Principal ---
         '/home': (context) => const HomePage(),
-
-        // --- Fluxo de Excursões ---
         '/excursions': (context) => const ExcursionsPage(),
         '/add-excursion': (context) => const AddExcursionPage(),
 
@@ -84,6 +79,8 @@ class MyApp extends StatelessWidget {
             return ExcursionSeatMapPage(
               excursionId: args['excursionId'],
               totalSeats: args['totalSeats'] ?? 44,
+              isSelectionMode: args['isSelectionMode'] ?? false,
+              initialSelectedSeat: args['initialSelectedSeat'],
             );
           } else if (args is String) {
             return ExcursionSeatMapPage(excursionId: args);
@@ -105,7 +102,6 @@ class MyApp extends StatelessWidget {
           return _errorPage("Dados da excursão incompletos para o Check-in");
         },
 
-        // --- Fluxo de Passageiros ---
         '/global-passengers': (context) {
           final args = ModalRoute.of(context)?.settings.arguments;
           if (args is Map<String, dynamic>) {
@@ -152,7 +148,6 @@ class MyApp extends StatelessWidget {
           );
         },
 
-        // --- Financeiro da excursão --- //
         '/excursion-finance': (context) {
           final args = ModalRoute.of(context)?.settings.arguments;
           if (args is Excursion) {
@@ -163,7 +158,6 @@ class MyApp extends StatelessWidget {
           );
         },
 
-        // --- Gestão e Configurações ---
         '/users': (context) => const UsersListPage(),
         '/finance': (context) => const FinancePage(),
         '/settings': (context) => const SettingsPage(),

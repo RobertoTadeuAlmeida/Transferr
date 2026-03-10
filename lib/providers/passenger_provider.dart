@@ -41,6 +41,33 @@ class PassengerProvider with ChangeNotifier {
   // OPERAÇÕES OPERACIONAIS (CHECK-IN / FINANCEIRO / VÍNCULO)
   // ===========================================================================
 
+  /// Quita o valor total da passagem (Dar baixa total)
+  Future<void> settleFullPayment({
+    required BuildContext context,
+    required String passengerId,
+    required String excursionId,
+    required double fullValue,
+  }) async {
+    _setLoading(true);
+    try {
+      await _service.settleFullPayment(
+        passengerId: passengerId,
+        excursionId: excursionId,
+        fullValue: fullValue,
+      );
+
+      if (context.mounted) {
+        await context.read<ExcursionProvider>().syncExcursionStats(excursionId);
+      }
+      notifyListeners();
+    } catch (e) {
+      _errorMessage = e.toString().replaceFirst('Exception: ', '');
+      rethrow;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
   Future<void> updateOperationalData({
     required BuildContext context,
     required String excursionId,
@@ -59,7 +86,7 @@ class PassengerProvider with ChangeNotifier {
 
       if (status != null) updates['statusEmbarque'] = status.value;
       if (localAtual != null) updates['localAtual'] = localAtual;
-      if (seatNumber != null) updates['poltrona'] = seatNumber; // Ajustado para 'poltrona'
+      if (seatNumber != null) updates['poltrona'] = seatNumber;
 
       if (depositValue != null) {
         updates['depositValue'] = depositValue;
@@ -132,7 +159,6 @@ class PassengerProvider with ChangeNotifier {
     _setLoading(true);
     _errorMessage = null;
     try {
-      // O Service agora cuida de salvar no CRM e criar a vaga se houver excursionId
       await _service.savePassenger(
         passenger: passenger,
         excursionId: excursionId,

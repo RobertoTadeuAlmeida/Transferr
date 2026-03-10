@@ -1,31 +1,35 @@
 import 'package:flutter/material.dart';
 import '../../../config/theme/app_theme.dart';
+import '../../../models/excursion.dart';
 
 class ExcursionStatsCard extends StatelessWidget {
   final int totalSeats;
   final int reservedSeats;
-  final int paidInFullCount;
+  final Excursion excursion;
 
   const ExcursionStatsCard({
     super.key,
     required this.totalSeats,
     required this.reservedSeats,
-    required this.paidInFullCount,
+    required this.excursion,
   });
 
   @override
   Widget build(BuildContext context) {
-    // Garante que o total nunca seja zero para evitar erro de divisão (NaN/Infinity)
-    final int safeTotal = totalSeats > 0 ? totalSeats : 1;
+    // Cálculos de Progresso baseados nos novos campos sincronizados
+    final int total = excursion.totalSeats > 0 ? excursion.totalSeats : 1;
 
-    // Cálculo das proporções para as barras
-    // O clamp garante que o valor fique entre 0.0 e 1.0 para o LinearProgressIndicator
-    double reservationProgress = (reservedSeats / safeTotal).clamp(0.0, 1.0);
-    double paymentProgress = (paidInFullCount / safeTotal).clamp(0.0, 1.0);
+    // Cálculo
+    final int seatsOnly = excursion.totalSeats - excursion.reservedSeats;
 
-    final int pendingSeats = reservedSeats > paidInFullCount
-        ? reservedSeats - paidInFullCount
-        : 0;
+    // Percentual de ocupação total (Reservas)
+    final double percentOcupado = (excursion.reservedSeats / total).clamp(
+      0.0,
+      1.0,
+    );
+
+    // Percentual de quitação (Pagos Completos)
+    final double percentPagos = (excursion.paidSeats / total).clamp(0.0, 1.0);
 
     return Card(
       elevation: 4,
@@ -40,13 +44,13 @@ class ExcursionStatsCard extends StatelessWidget {
               children: [
                 _buildStatItem("Total Vagas", "$totalSeats", Colors.blueAccent),
                 _buildStatItem(
-                  "Pendentes",
-                  "$pendingSeats",
+                  "Reservas",
+                  "$reservedSeats",
                   AppTheme.primaryColor,
                 ),
                 _buildStatItem(
                   "Pagos",
-                  "$paidInFullCount",
+                  "${excursion.paidSeats}",
                   AppTheme.successColor,
                 ),
               ],
@@ -55,6 +59,7 @@ class ExcursionStatsCard extends StatelessWidget {
 
             Stack(
               children: [
+                // Fundo da barra
                 Container(
                   height: 14,
                   decoration: BoxDecoration(
@@ -63,18 +68,18 @@ class ExcursionStatsCard extends StatelessWidget {
                   ),
                 ),
 
-                // Representa quem ocupou a vaga mas pode não ter pago tudo.
+                // Camada 1: Ocupação Total (Reservas)
                 LinearProgressIndicator(
-                  value: reservationProgress,
+                  value: percentOcupado,
                   backgroundColor: Colors.transparent,
                   color: AppTheme.primaryColor.withValues(alpha: 0.4),
                   minHeight: 14,
                   borderRadius: BorderRadius.circular(7),
                 ),
 
-                // Fica por cima da laranja. Se todos pagarem, a barra fica toda verde.
+                // Camada 2: Quitação (Pagos) - Fica por cima da ocupação
                 LinearProgressIndicator(
-                  value: paymentProgress,
+                  value: percentPagos,
                   backgroundColor: Colors.transparent,
                   color: AppTheme.successColor,
                   minHeight: 14,
@@ -85,22 +90,25 @@ class ExcursionStatsCard extends StatelessWidget {
 
             const SizedBox(height: 12),
 
-            // Legenda e Porcentagem
+            // Legenda e Detalhes
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Row(
                   children: [
                     _buildLegendItem(
-                      "Pendente",
+                      "Aguardando ($seatsOnly)",
                       AppTheme.primaryColor.withValues(alpha: 0.6),
                     ),
                     const SizedBox(width: 12),
-                    _buildLegendItem("Pagos", AppTheme.successColor),
+                    _buildLegendItem(
+                      "Pagos (${excursion.paidSeats})",
+                      AppTheme.successColor,
+                    ),
                   ],
                 ),
                 Text(
-                  "${(reservationProgress * 100).toStringAsFixed(0)}% ocupado",
+                  "${(percentOcupado * 100).toStringAsFixed(0)}% ocupado",
                   style: const TextStyle(
                     fontSize: 11,
                     color: Colors.white54,

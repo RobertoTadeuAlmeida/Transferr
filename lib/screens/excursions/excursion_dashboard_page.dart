@@ -43,10 +43,6 @@ class ExcursionDashboardPage extends StatelessWidget {
         builder: (context, snapshot) {
           final passengers = snapshot.data ?? [];
 
-          // Calcula quantos já pagaram o valor total (Quitação)
-          final paidInFullCount = passengers
-              .where((p) => p.depositValue >= excursion.basePrice)
-              .length;
           final double lucro =
               excursion.faturamentoPrevisto ;
 
@@ -59,8 +55,8 @@ class ExcursionDashboardPage extends StatelessWidget {
               ExcursionStatsCard(
                 totalSeats: excursion.totalSeats,
                 reservedSeats: excursion.reservedSeats,
+                excursion: excursion,
                 // Agora o card de estatísticas foca em pagamentos completos
-                paidInFullCount: paidInFullCount,
               ),
 
               const SizedBox(height: 32),
@@ -70,7 +66,7 @@ class ExcursionDashboardPage extends StatelessWidget {
                 title: "Lista de Passageiros",
                 // Subtítulo atualizado para mostrar a saúde financeira da viagem
                 subtitle:
-                    "$paidInFullCount de ${passengers.length} passagens pagas",
+                    "${excursion.paidSeats} de ${excursion.reservedSeats} passagens pagas",
                 icon: Icons.people_alt_rounded,
                 color: Colors.blue,
                 onTap: () => Navigator.push(
