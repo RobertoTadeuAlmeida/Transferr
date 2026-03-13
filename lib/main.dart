@@ -8,24 +8,32 @@ import 'package:transferr/providers/user_provider.dart';
 import 'package:transferr/providers/excursion_provider.dart';
 import 'package:transferr/providers/auth_provider.dart';
 import 'package:transferr/providers/passenger_provider.dart';
-import 'package:transferr/screens/finance/excursion_finance_page.dart';
 
-// Screens
-import 'package:transferr/screens/register/registration_page.dart';
+// Screens - Auth & Geral
 import 'package:transferr/screens/login/auth_wrapper.dart';
+import 'package:transferr/screens/register/registration_page.dart';
 import 'package:transferr/screens/home_page.dart';
+import 'package:transferr/screens/settings/settings_page.dart';
+
+// Screens - Excursões
 import 'package:transferr/screens/excursions/excursions_page.dart';
 import 'package:transferr/screens/excursions/excursion_dashboard_page.dart';
 import 'package:transferr/screens/excursions/add_excursion_page.dart';
 import 'package:transferr/screens/excursions/excursion_seat_map_page.dart';
 import 'package:transferr/screens/excursions/checkin_page.dart';
+import 'package:transferr/screens/excursions/history_page.dart';
+
+// Screens - Passageiros
 import 'package:transferr/screens/passengers/add_passenger_page.dart';
 import 'package:transferr/screens/passengers/global_passengers_page.dart';
 import 'package:transferr/screens/passengers/passengers_list_page.dart';
 import 'package:transferr/screens/passengers/passenger_details_page.dart';
-import 'package:transferr/screens/settings/settings_page.dart';
-import 'package:transferr/screens/finance/finance_page.dart';
+
+// Screens - Equipe & Finanças
 import 'package:transferr/screens/users/users_list_page.dart';
+import 'package:transferr/screens/users/add_user_page.dart';
+import 'package:transferr/screens/finance/finance_page.dart';
+import 'package:transferr/screens/finance/excursion_finance_page.dart';
 
 import 'config/theme/app_theme.dart';
 import 'models/excursion.dart';
@@ -64,6 +72,11 @@ class MyApp extends StatelessWidget {
         '/home': (context) => const HomePage(),
         '/excursions': (context) => const ExcursionsPage(),
         '/add-excursion': (context) => const AddExcursionPage(),
+        '/history': (context) => const HistoryPage(),
+
+        // Gestão de Equipe
+        '/users': (context) => const UsersListPage(),
+        '/add-user': (context) => const AddUserPage(),
 
         '/excursion-dashboard': (context) {
           final args = ModalRoute.of(context)?.settings.arguments;
@@ -85,9 +98,7 @@ class MyApp extends StatelessWidget {
           } else if (args is String) {
             return ExcursionSeatMapPage(excursionId: args);
           }
-          return _errorPage(
-            "ID da excursão não informado para o mapa de assentos",
-          );
+          return _errorPage("ID da excursão não informado para o mapa de assentos");
         },
 
         '/check-in': (context) {
@@ -95,8 +106,7 @@ class MyApp extends StatelessWidget {
           if (args is Map<String, dynamic>) {
             return CheckInPage(
               excursionId: args['excursionId'],
-              destinationName:
-                  args['destinationName'] ?? 'Destino não informado',
+              destinationName: args['destinationName'] ?? 'Destino não informado',
             );
           }
           return _errorPage("Dados da excursão incompletos para o Check-in");
@@ -130,9 +140,7 @@ class MyApp extends StatelessWidget {
           if (args is String) {
             return AddPassengerPage(excursionId: args);
           }
-          return _errorPage(
-            "Parâmetros insuficientes para adicionar passageiro",
-          );
+          return _errorPage("Parâmetros insuficientes para adicionar passageiro");
         },
 
         '/passenger-details': (context) {
@@ -143,9 +151,7 @@ class MyApp extends StatelessWidget {
               excursionId: args['excursionId'],
             );
           }
-          return _errorPage(
-            "Dados do passageiro não encontrados para detalhes",
-          );
+          return _errorPage("Dados do passageiro não encontrados para detalhes");
         },
 
         '/excursion-finance': (context) {
@@ -153,12 +159,9 @@ class MyApp extends StatelessWidget {
           if (args is Excursion) {
             return ExcursionFinancePage(excursion: args);
           }
-          return _errorPage(
-            "Dados da excursão não encontrados para a planilha financeira",
-          );
+          return _errorPage("Dados da excursão não encontrados para a planilha financeira");
         },
 
-        '/users': (context) => const UsersListPage(),
         '/finance': (context) => const FinancePage(),
         '/settings': (context) => const SettingsPage(),
       },

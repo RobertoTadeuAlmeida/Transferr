@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'; // Para FilteringTextInputFormatter
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:transferr/config/theme/app_theme.dart';
@@ -29,10 +29,8 @@ class _AddExcursionPageState extends State<AddExcursionPage> {
 
   late DateTime _startDate;
   late DateTime _returnDate;
-  late ExcursionStatus _selectedStatus;
   bool _isLoading = false;
 
-  // Formatador para Moeda Brasileira
   final NumberFormat _currencyFormatter = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
 
   @override
@@ -44,7 +42,6 @@ class _AddExcursionPageState extends State<AddExcursionPage> {
     _descController = TextEditingController(text: e?.description ?? '');
     _destIdController = TextEditingController(text: e?.idMainDestination ?? '');
 
-    // Inicializa o preço com a máscara se existir
     _priceController = TextEditingController(
       text: e != null ? _currencyFormatter.format(e.basePrice) : '',
     );
@@ -53,9 +50,6 @@ class _AddExcursionPageState extends State<AddExcursionPage> {
     _currentSlug = e?.slug ?? '';
     _startDate = e?.startDate ?? DateTime.now().add(const Duration(days: 7));
     _returnDate = e?.returnDate ?? DateTime.now().add(const Duration(days: 9));
-
-    // Garante que o status inicial seja Programada se for nova
-    _selectedStatus = e?.status ?? ExcursionStatus.programada;
   }
 
   void _updateSlug(String name) {
@@ -102,7 +96,6 @@ class _AddExcursionPageState extends State<AddExcursionPage> {
       final authProvider = context.read<AuthProvider>();
       final excursionProvider = context.read<ExcursionProvider>();
 
-      // Converte a máscara "R$ 1.200,50" de volta para double 1200.50
       String plainValue = _priceController.text
           .replaceAll('R\$', '')
           .replaceAll('.', '')
@@ -121,8 +114,9 @@ class _AddExcursionPageState extends State<AddExcursionPage> {
         totalSeats: int.tryParse(_seatsController.text) ?? 0,
         reservedSeats: widget.excursion?.reservedSeats ?? 0,
         slug: _currentSlug,
-        status: _selectedStatus,
+        status: widget.excursion?.status ?? ExcursionStatus.programada,
         idResponsible: widget.excursion?.idResponsible ?? authProvider.currentUser?.id ?? '',
+        empresa: widget.excursion?.empresa ?? authProvider.currentUser?.company ?? '',
       );
 
       if (widget.excursion == null) {
@@ -209,7 +203,7 @@ class _AddExcursionPageState extends State<AddExcursionPage> {
                     keyboardType: TextInputType.number,
                     inputFormatters: [
                       FilteringTextInputFormatter.digitsOnly,
-                      CurrencyInputFormatter(), // Classe personalizada de máscara abaixo
+                      CurrencyInputFormatter(),
                     ],
                   ),
                 ),
@@ -231,48 +225,7 @@ class _AddExcursionPageState extends State<AddExcursionPage> {
             _buildSectionTitle("Cronograma"),
             _buildDateTile('Partida', _startDate, () => _selectDateTime(context, true)),
             _buildDateTile('Retorno', _returnDate, () => _selectDateTime(context, false)),
-            const SizedBox(height: 24),
-
-            _buildSectionTitle("Estado da Viagem"),
-            const SizedBox(height: 8),
-            // SWITCH PARA PROGRAMADA / EM ANDAMENTO
-            Container(
-              decoration: BoxDecoration(
-                color: AppTheme.cardColor,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: SwitchListTile(
-                title: Text(
-                  _selectedStatus == ExcursionStatus.emAndamento
-                      ? "EM ANDAMENTO"
-                      : "PROGRAMADA",
-                  style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: _selectedStatus == ExcursionStatus.emAndamento
-                          ? AppTheme.infoColor
-                          : AppTheme.primaryColor
-                  ),
-                ),
-                subtitle: const Text("Alternar entre viagem planejada ou iniciada"),
-                secondary: Icon(
-                  _selectedStatus == ExcursionStatus.emAndamento
-                      ? Icons.play_circle_fill
-                      : Icons.pause_circle_filled,
-                  color: _selectedStatus == ExcursionStatus.emAndamento
-                      ? AppTheme.infoColor
-                      : AppTheme.primaryColor,
-                ),
-                value: _selectedStatus == ExcursionStatus.emAndamento,
-                onChanged: (bool value) {
-                  setState(() {
-                    _selectedStatus = value
-                        ? ExcursionStatus.emAndamento
-                        : ExcursionStatus.programada;
-                  });
-                },
-              ),
-            ),
-
+            
             const SizedBox(height: 40),
             ElevatedButton(
               onPressed: _save,
@@ -332,7 +285,6 @@ class _AddExcursionPageState extends State<AddExcursionPage> {
   }
 }
 
-// Classe de Máscara de Moeda (Pode colocar no final do arquivo ou em um utils)
 class CurrencyInputFormatter extends TextInputFormatter {
   @override
   TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) {

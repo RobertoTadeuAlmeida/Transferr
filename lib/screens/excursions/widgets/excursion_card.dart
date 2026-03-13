@@ -29,13 +29,11 @@ class ExcursionCard extends StatelessWidget {
       symbol: 'R\$',
     );
 
-    // Cálculos de Progresso baseados nos novos campos sincronizados
+    final bool isCompleted = excursion.status == ExcursionStatus.concluida;
+
+    // Cálculos de Progresso
     final int total = excursion.totalSeats > 0 ? excursion.totalSeats : 1;
-    
-    // Percentual de ocupação total (Reservas)
     final double percentOcupado = (excursion.reservedSeats / total).clamp(0.0, 1.0);
-    
-    // Percentual de quitação (Pagos Completos)
     final double percentPagos = (excursion.paidSeats / total).clamp(0.0, 1.0);
 
     // Configuração de Status
@@ -96,7 +94,7 @@ class ExcursionCard extends StatelessWidget {
 
               const SizedBox(height: 16),
 
-              // --- DUAS BARRAS DE PROGRESSO ---
+              // Barras de Progresso
               _buildProgressBar(
                 label: "Ocupação (Reservas)",
                 percent: percentOcupado,
@@ -115,7 +113,7 @@ class ExcursionCard extends StatelessWidget {
 
               const Divider(height: 32, color: Colors.white10),
 
-              // Rodapé Financeiro
+              // Rodapé Financeiro Dinâmico
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -123,17 +121,20 @@ class ExcursionCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'FATURAMENTO PREVISTO',
+                        isCompleted ? 'LUCRO BRUTO FINAL' : 'FATURAMENTO PREVISTO',
                         style: textTheme.labelSmall?.copyWith(
-                          color: Colors.grey,
+                          color: isCompleted ? AppTheme.successColor : Colors.grey,
                           fontSize: 9,
+                          fontWeight: isCompleted ? FontWeight.bold : FontWeight.normal,
                         ),
                       ),
                       Text(
-                        currencyFormat.format(excursion.faturamentoPrevisto),
+                        // Se concluída, mostra o faturamento real que entrou. 
+                        // Se não, mostra o que é previsto se vender tudo.
+                        currencyFormat.format(isCompleted ? (excursion.paidSeats * excursion.basePrice) : excursion.faturamentoPrevisto),
                         style: textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.bold,
-                          color: AppTheme.primaryColor,
+                          color: isCompleted ? AppTheme.successColor : AppTheme.primaryColor,
                         ),
                       ),
                     ],

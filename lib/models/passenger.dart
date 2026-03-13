@@ -12,18 +12,15 @@ class Passenger {
   final bool isMinor;
 
   // --- VÍNCULO COM EXCURSÃO ATIVA ---
-  final String excursionId;
+  final String? excursionId; // ID da excursão que ele está agora
   final String seatNumber;
   final double depositValue;
   final bool isPaid;
   final BoardingStatus statusEmbarque;
-  final String? agenteResponsavel;
-
-  // Armazena onde o passageiro realizou a última ação (embarque/parada/desembarque)
-  final String? ultimaParada;
 
   // --- HISTÓRICO E METADADOS ---
   final int totalTrips;
+  final List<String> tripHistory; // IDs das excursões concluídas
   final DateTime? lastUpdate;
 
   // --- COMPOSIÇÃO ---
@@ -31,7 +28,7 @@ class Passenger {
 
   Passenger({
     required this.id,
-    this.excursionId = '',
+    this.excursionId,
     required this.name,
     required this.document,
     required this.phone,
@@ -40,11 +37,10 @@ class Passenger {
     this.isMinor = false,
     this.isPaid = false,
     this.statusEmbarque = BoardingStatus.aguardando,
-    this.agenteResponsavel,
-    this.ultimaParada,
     this.guardian,
     this.depositValue = 0.0,
     this.totalTrips = 0,
+    this.tripHistory = const [],
     this.lastUpdate,
   });
 
@@ -52,7 +48,7 @@ class Passenger {
   // REGRAS DE NEGÓCIO (GETTERS)
   // ===========================================================================
 
-  bool get hasGuardian => isMinor && guardian != null;
+  bool get isCurrentlyTraveling => excursionId != null && excursionId!.isNotEmpty && excursionId != "null";
 
   int get age {
     final now = DateTime.now();
@@ -77,15 +73,14 @@ class Passenger {
       'nascimento': Timestamp.fromDate(birthDate),
       'ehMenor': isMinor,
       'poltrona': seatNumber,
-      'excursaoId': excursionId.isEmpty ? null : excursionId,
+      'excursionId': excursionId, // Padronizado sem til
       'statusEmbarque': statusEmbarque.value,
-      'agenteResponsavel': agenteResponsavel,
-      'ultimaParada': ultimaParada,
       'responsavel': isMinor ? guardian?.toMap() : null,
       'depositValue': depositValue,
       'isPaid': isPaid,
       'lastUpdate': FieldValue.serverTimestamp(),
       'totalViagens': totalTrips,
+      'tripHistory': tripHistory,
     };
   }
 
@@ -97,26 +92,21 @@ class Passenger {
       phone: map['telefone'] ?? '',
       birthDate: (map['nascimento'] as Timestamp?)?.toDate() ?? DateTime.now(),
       isMinor: map['ehMenor'] ?? false,
-      excursionId: map['excursaoId'] ?? map['excursionId'] ?? '',
+      excursionId: map['excursionId'] as String?,
       seatNumber: map['poltrona'] ?? '',
       statusEmbarque: BoardingStatus.fromString(map['statusEmbarque']),
-      agenteResponsavel: map['agenteResponsavel'],
-      ultimaParada: map['ultimaParada'],
       guardian: map['responsavel'] != null
           ? Guardian.fromMap(map['responsavel'])
           : null,
       depositValue: (map['depositValue'] ?? 0.0).toDouble(),
       isPaid: map['isPaid'] ?? false,
       totalTrips: (map['totalViagens'] ?? 0).toInt(),
+      tripHistory: List<String>.from(map['tripHistory'] ?? []),
       lastUpdate: map['lastUpdate'] is Timestamp
           ? (map['lastUpdate'] as Timestamp).toDate()
           : null,
     );
   }
-
-  // ===========================================================================
-  // IMUTABILIDADE (COPYWITH)
-  // ===========================================================================
 
   Passenger copyWith({
     String? id,
@@ -128,12 +118,11 @@ class Passenger {
     String? seatNumber,
     bool? isMinor,
     BoardingStatus? statusEmbarque,
-    String? agenteResponsavel,
-    String? ultimaParada,
     Guardian? guardian,
     double? depositValue,
     bool? isPaid,
     int? totalTrips,
+    List<String>? tripHistory,
     DateTime? lastUpdate,
   }) {
     return Passenger(
@@ -146,12 +135,11 @@ class Passenger {
       seatNumber: seatNumber ?? this.seatNumber,
       isMinor: isMinor ?? this.isMinor,
       statusEmbarque: statusEmbarque ?? this.statusEmbarque,
-      agenteResponsavel: agenteResponsavel ?? this.agenteResponsavel,
-      ultimaParada: ultimaParada ?? this.ultimaParada,
       guardian: guardian ?? this.guardian,
       depositValue: depositValue ?? this.depositValue,
       isPaid: isPaid ?? this.isPaid,
       totalTrips: totalTrips ?? this.totalTrips,
+      tripHistory: tripHistory ?? this.tripHistory,
       lastUpdate: lastUpdate ?? this.lastUpdate,
     );
   }

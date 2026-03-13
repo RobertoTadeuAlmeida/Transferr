@@ -15,6 +15,8 @@ class Excursion {
   final String slug;
   final ExcursionStatus status;
   final String idResponsible;
+  final String empresa; // NOVO: Vínculo Multi-tenant
+  final bool isDeleted; // Soft Delete
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -30,8 +32,10 @@ class Excursion {
     this.reservedSeats = 0,
     this.paidSeats = 0,
     required this.slug,
-    this.status = ExcursionStatus.emAndamento,
+    this.status = ExcursionStatus.programada,
     required this.idResponsible,
+    required this.empresa, // Campo obrigatório
+    this.isDeleted = false,
     this.createdAt,
     this.updatedAt,
   });
@@ -40,34 +44,19 @@ class Excursion {
   // ----------- LÓGICA DE NEGÓCIO (CÁLCULOS LOCAIS / DDD) -----------
   // ===========================================================================
 
-
-  /// Verifica se a excursão já atingiu o limite de vagas
   bool get isFull => reservedSeats > totalSeats;
-
-  /// FATURAMENTO MÁXIMO POSSÍVEL:
-  /// O valor total que a empresa ganharia se vendesse 100% dos assentos.
   double get faturamentoPrevisto => totalSeats * basePrice;
-
-  /// FATURAMENTO ESTIMADO ATUAL:
-  /// Baseado apenas no número de reservas (sem considerar pagamentos parciais).
   double get faturamentoEstimadoAtual => reservedSeats * basePrice;
 
-  /// CUSTO UNITÁRIO POR ASSENTO:
-  /// Pega o total de gastos (Ônibus, etc) e divide pela capacidade total.
-  /// Ajuda a definir se o precoBase está cobrindo os custos.
   double calcularCustoPorAssento(double totalDespesas) {
     if (totalSeats <= 0) return 0.0;
     return totalDespesas / totalSeats;
   }
 
-  /// LUCRO LÍQUIDO PREVISTO (FINAL):
-  /// Quanto sobrará no bolso se todos os assentos forem vendidos.
   double calcularLucroPrevisto(double totalDespesas) {
     return faturamentoPrevisto - totalDespesas;
   }
 
-  /// LUCRO REALIZADO ATUAL (FLUXO DE CAIXA):
-  /// Dinheiro que de fato entrou dos passageiros menos as despesas cadastradas.
   double calcularLucroAtual(double faturamentoReal, double totalDespesas) {
     return faturamentoReal - totalDespesas;
   }
@@ -87,8 +76,10 @@ class Excursion {
       'assentosTotais': totalSeats,
       'assentosReservados': reservedSeats,
       'slug': slug,
-      'status': status.name.toUpperCase(),
+      'status': _statusToString(status),
       'idResponsavel': idResponsible,
+      'empresa': empresa, // Salvando no Firestore
+      'excluido': isDeleted,
       'criadoEm': createdAt ?? FieldValue.serverTimestamp(),
       'atualizadoEm': FieldValue.serverTimestamp(),
     };
@@ -108,22 +99,30 @@ class Excursion {
       paidSeats: data['assentosPagos'] as int? ?? 0,
       slug: data['slug'] ?? '',
       idResponsible: data['idResponsavel'] ?? '',
+      empresa: data['empresa'] ?? '', // Lendo do Firestore
+      isDeleted: data['excluido'] ?? false,
       status: _parseStatus(data['status']),
       createdAt: (data['criadoEm'] as Timestamp?)?.toDate(),
       updatedAt: (data['atualizadoEm'] as Timestamp?)?.toDate(),
     );
   }
 
+  static String _statusToString(ExcursionStatus status) {
+    switch (status) {
+      case ExcursionStatus.programada: return 'PROGRAMADA';
+      case ExcursionStatus.emAndamento: return 'EM_ANDAMENTO';
+      case ExcursionStatus.concluida: return 'CONCLUIDA';
+      case ExcursionStatus.cancelada: return 'CANCELADA';
+    }
+  }
+
   static ExcursionStatus _parseStatus(String? status) {
     switch (status) {
-      case 'EM_ANDAMENTO':
-        return ExcursionStatus.emAndamento;
-      case 'CONCLUIDA':
-        return ExcursionStatus.concluida;
-      case 'CANCELADA':
-        return ExcursionStatus.cancelada;
-      default:
-        return ExcursionStatus.emAndamento;
+      case 'PROGRAMADA': return ExcursionStatus.programada;
+      case 'EM_ANDAMENTO': return ExcursionStatus.emAndamento;
+      case 'CONCLUIDA': return ExcursionStatus.concluida;
+      case 'CANCELADA': return ExcursionStatus.cancelada;
+      default: return ExcursionStatus.programada;
     }
   }
 
@@ -141,6 +140,8 @@ class Excursion {
     String? slug,
     ExcursionStatus? status,
     String? idResponsible,
+    String? empresa, // NOVO no copyWith
+    bool? isDeleted,
   }) {
     return Excursion(
       id: id ?? this.id,
@@ -156,6 +157,8 @@ class Excursion {
       slug: slug ?? this.slug,
       status: status ?? this.status,
       idResponsible: idResponsible ?? this.idResponsible,
+      empresa: empresa ?? this.empresa,
+      isDeleted: isDeleted ?? this.isDeleted,
     );
   }
 }

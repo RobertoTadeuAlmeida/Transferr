@@ -5,7 +5,6 @@ import '../models/expense.dart';
 class ExcursionRepository {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  // --- REFERÊNCIAS ---
   CollectionReference<Map<String, dynamic>> get _excursionsRef =>
       _firestore.collection('excursoes');
 
@@ -15,15 +14,12 @@ class ExcursionRepository {
   CollectionReference<Map<String, dynamic>> _expensesRef(String excursionId) =>
       _excursionsRef.doc(excursionId).collection('despesas');
 
-  // =========================================================================
-  // 1. MÉTODOS DE EXCURSÃO (DOCUMENTO PAI)
-  // =========================================================================
-
-  /// Ouve o stream de excursões, com filtro opcional por responsável.
-  Stream<List<Excursion>> watchExcursions({String? responsibleId}) {
+  /// Escuta as excursões filtrando pela EMPRESA (Multi-tenant)
+  Stream<List<Excursion>> watchExcursions({String? companyId}) {
     Query<Map<String, dynamic>> query = _excursionsRef;
-    if (responsibleId != null) {
-      query = query.where('idResponsavel', isEqualTo: responsibleId);
+    if (companyId != null) {
+      // Alterado de idResponsavel para empresa para bater com as Security Rules
+      query = query.where('empresa', isEqualTo: companyId);
     }
     return query
         .orderBy('dataPartida', descending: false)
@@ -35,17 +31,14 @@ class ExcursionRepository {
         );
   }
 
-  /// Adiciona um novo documento de excursão.
   Future<void> add(Excursion excursion) async {
     await _excursionsRef.add(_cleanMap(excursion.toMap()));
   }
 
-  /// Atualiza dados no documento de uma excursão.
   Future<void> update(String excursionId, Map<String, dynamic> data) async {
     await _excursionsRef.doc(excursionId).update(_cleanMap(data));
   }
 
-  /// Deleta múltiplos documentos de excursão em um lote.
   Future<void> deleteMany(List<String> ids) async {
     final batch = _firestore.batch();
     for (var id in ids) {
@@ -54,7 +47,6 @@ class ExcursionRepository {
     await batch.commit();
   }
 
-  /// Busca uma excursão pelo seu ID.
   Future<Excursion?> getExcursionById(String excursionId) async {
     try {
       final doc = await _excursionsRef.doc(excursionId).get();
@@ -65,48 +57,25 @@ class ExcursionRepository {
     }
   }
 
-  // =========================================================================
-  // 2. MÉTODOS DE VAGAS (SUB-COLEÇÃO)
-  // =========================================================================
-
-  /// Ouve a sub-coleção de vagas de uma excursão.
-  Stream<QuerySnapshot<Map<String, dynamic>>> watchVacancies(
-    String excursionId,
-  ) {
+  Stream<QuerySnapshot<Map<String, dynamic>>> watchVacancies(String excursionId) {
     return _vagasRef(excursionId).snapshots();
   }
 
-  // =========================================================================
-  // 3. MÉTODOS DE DESPESAS (SUB-COLEÇÃO)
-  // =========================================================================
-
-  /// Ouve a sub-coleção de despesas de uma excursão.
   Stream<List<Expense>> watchExpenses(String excursionId) {
     return _expensesRef(excursionId)
         .orderBy('data', descending: true)
         .snapshots()
-        .map(
-          (snap) => snap.docs
-              .map((doc) => Expense.fromMap(doc.id, doc.data()))
-              .toList(),
-        );
+        .map((snap) => snap.docs.map((doc) => Expense.fromMap(doc.id, doc.data())).toList());
   }
 
-  /// Adiciona uma nova despesa a uma excursão.
   Future<void> addExpense(String excursionId, Expense expense) async {
     await _expensesRef(excursionId).add(_cleanMap(expense.toMap()));
   }
 
-  /// Deleta uma despesa de uma excursão.
   Future<void> deleteExpense(String excursionId, String expenseId) async {
     await _expensesRef(excursionId).doc(expenseId).delete();
   }
 
-  // =========================================================================
-  // 4. UTILITÁRIO
-  // =========================================================================
-
-  /// Remove chaves com valores nulos de um mapa para evitar erros no Firestore.
   Map<String, dynamic> _cleanMap(Map<String, dynamic> data) {
     data.removeWhere((key, value) => value == null);
     return data;

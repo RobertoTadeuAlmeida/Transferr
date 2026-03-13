@@ -5,51 +5,47 @@ import '../screens/passengers/passenger_details_page.dart';
 
 class PassengerCrmCard extends StatelessWidget {
   final Passenger passenger;
-  final Widget? trailing; // Novo parâmetro opcional
-  final VoidCallback? onTap; // Novo parâmetro opcional para customizar o clique
+  final Widget? trailing; 
+  final VoidCallback? onTap;
 
   const PassengerCrmCard({
     super.key,
     required this.passenger,
-    this.trailing, // Adicionado ao construtor
-    this.onTap,    // Adicionado ao construtor
+    this.trailing,
+    this.onTap,
   });
 
   /// Define o texto de status baseado na atividade do passageiro
-  String _getActivityStatus() {
-    if (passenger.excursionId.isNotEmpty) {
+  String _getActivityStatus(bool isTraveling) {
+    if (isTraveling) {
       return 'Passageiro em excursão ativa';
     }
 
-    if (passenger.lastUpdate == null) {
-      return 'Sem histórico de viagens';
+    if (passenger.totalTrips > 0) {
+      return 'Cliente Fiel (${passenger.totalTrips} viagens)';
     }
 
-    final now = DateTime.now();
-    final lastTrip = passenger.lastUpdate!;
-    final difference = now.difference(lastTrip);
-
-    if (difference.inDays == 0) return 'Concluiu viagem hoje';
-    if (difference.inDays < 30) return 'Última viagem há ${difference.inDays} dias';
-
-    if (difference.inDays < 365) {
-      final months = (difference.inDays / 30).floor();
-      return 'Última viagem há $months ${months == 1 ? 'mês' : 'meses'}';
-    }
-
-    return 'Inativo há mais de um ano';
+    return 'Novo Passageiro';
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final bool isTraveling = passenger.excursionId.isNotEmpty;
+    
+    // MELHORIA: Usa o getter centralizado do modelo para evitar erros de null safety
+    final bool isTraveling = passenger.isCurrentlyTraveling;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
-      elevation: isTraveling ? 4 : 1,
+      elevation: isTraveling ? 4 : 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(
+          color: isTraveling ? AppTheme.successColor.withValues(alpha: 0.3) : Colors.white10,
+          width: 1,
+        ),
+      ),
       child: InkWell(
-        // Se onTap for nulo, usa o comportamento padrão de abrir detalhes
         onTap: onTap ?? () => Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => PassengerDetailsPage(passenger: passenger)),
@@ -65,11 +61,11 @@ class PassengerCrmCard extends StatelessWidget {
                   CircleAvatar(
                     radius: 26,
                     backgroundColor: isTraveling
-                        ? AppTheme.successColor.withAlpha(20)
-                        : theme.primaryColor.withAlpha(30),
+                        ? AppTheme.successColor.withValues(alpha: 0.1)
+                        : Colors.white.withValues(alpha: 0.05),
                     child: Icon(
                         Icons.person,
-                        color: isTraveling ? AppTheme.successColor : theme.primaryColor,
+                        color: isTraveling ? AppTheme.successColor : Colors.white54,
                         size: 30
                     ),
                   ),
@@ -109,13 +105,13 @@ class PassengerCrmCard extends StatelessWidget {
                     Row(
                       children: [
                         Icon(
-                            isTraveling ? Icons.directions_bus : Icons.calendar_today,
+                            isTraveling ? Icons.directions_bus : Icons.history,
                             size: 12,
                             color: isTraveling ? AppTheme.successColor : theme.hintColor
                         ),
                         const SizedBox(width: 6),
                         Text(
-                          _getActivityStatus(),
+                          _getActivityStatus(isTraveling),
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: isTraveling ? AppTheme.successColor : theme.hintColor,
                             fontWeight: isTraveling ? FontWeight.bold : FontWeight.normal,
@@ -127,8 +123,6 @@ class PassengerCrmCard extends StatelessWidget {
                 ),
               ),
 
-              // ÁREA DINÂMICA: Se houver trailing (botão de adicionar), mostra ele.
-              // Se não, mostra o Badge de Fidelidade original.
               if (trailing != null)
                 trailing!
               else
@@ -145,13 +139,13 @@ class PassengerCrmCard extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         color: isTraveling
-            ? AppTheme.successColor.withAlpha(15)
-            : theme.primaryColor.withAlpha(15),
+            ? AppTheme.successColor.withValues(alpha: 0.05)
+            : Colors.white.withValues(alpha: 0.03),
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
             color: isTraveling
-                ? AppTheme.successColor.withAlpha(30)
-                : theme.primaryColor.withAlpha(30)
+                ? AppTheme.successColor.withValues(alpha: 0.2)
+                : Colors.white10
         ),
       ),
       child: Column(
@@ -161,7 +155,7 @@ class PassengerCrmCard extends StatelessWidget {
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
-              color: isTraveling ? AppTheme.successColor : theme.primaryColor,
+              color: isTraveling ? AppTheme.successColor : AppTheme.primaryColor,
             ),
           ),
           Text(
@@ -169,7 +163,7 @@ class PassengerCrmCard extends StatelessWidget {
             style: TextStyle(
                 fontSize: 8,
                 fontWeight: FontWeight.bold,
-                color: isTraveling ? AppTheme.successColor.withAlpha(150) : Colors.white54
+                color: isTraveling ? AppTheme.successColor.withValues(alpha: 0.6) : Colors.white38
             ),
           ),
         ],

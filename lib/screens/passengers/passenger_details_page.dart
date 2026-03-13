@@ -167,7 +167,7 @@ class _FinancialCard extends StatelessWidget {
         basePrice: 0,
         totalSeats: 0,
         slug: '',
-        idResponsible: '',
+        idResponsible: '', empresa: '',
       ),
     );
 

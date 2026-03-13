@@ -2,60 +2,60 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../models/user.dart';
 import '../services/user_service.dart';
-import '../repositories/user_repository.dart'; // Apenas para o default
+import '../repositories/user_repository.dart';
 
 class UserProvider with ChangeNotifier {
-  // Injeção do service
   final UserService _service;
-
-  // Inscrição para a stream (Real-time)
   StreamSubscription? _userSubscription;
+  StreamSubscription? _inviteSubscription;
 
-  // Estado Interno
   List<User> _allUsers = [];
-  bool _isLoading = true;
+  List<Map<String, dynamic>> _pendingInvites = [];
+  bool _isLoading = false;
   String? _error;
   String _searchTerm = '';
+  String? _currentCompanyId;
 
-  // --- CONSTRUTOR ---
-  // Permitimos passar o service para facilitar testes unitários no futuro
   UserProvider({UserService? service})
-      : _service = service ?? UserService(UserRepository()) {
-    _initUserStream();
-  }
+      : _service = service ?? UserService(UserRepository());
 
-  // --- GETTERS ---
-
-  /// Retorna a lista filtrada baseada no termo de busca
   List<User> get users {
     if (_searchTerm.isEmpty) return _allUsers;
-
     final term = _searchTerm.toLowerCase();
     return _allUsers.where((user) {
       final nameMatches = user.name.toLowerCase().contains(term);
       final emailMatches = user.email.toLowerCase().contains(term);
-
-      // Busca pelo documento (CPF) removendo pontuação
-      final docClean = user.document.replaceAll(RegExp(r'\D'), '');
-      final docMatches = docClean.contains(term);
-
-      return nameMatches || emailMatches || docMatches;
+      return nameMatches || emailMatches;
     }).toList();
   }
 
+  List<Map<String, dynamic>> get pendingInvites => _pendingInvites;
   bool get isLoading => _isLoading;
   String? get error => _error;
   int get usersCount => users.length;
 
-  // --- MÉTODOS DE ESTADO ---
+  /// Atualiza o termo de busca e notifica a UI para filtrar a lista
+  void searchUsers(String term) {
+    _searchTerm = term.trim();
+    notifyListeners();
+  }
 
-  /// Inicia a escuta em tempo real dos usuários do sistema
-  void _initUserStream() {
+  void initCompanyStream(String? companyId) {
+    if (companyId == null || companyId.isEmpty) {
+      _allUsers = [];
+      _currentCompanyId = null;
+      _userSubscription?.cancel();
+      notifyListeners();
+      return;
+    }
+    if (_currentCompanyId == companyId) return;
+
+    _currentCompanyId = companyId;
     _isLoading = true;
     _userSubscription?.cancel();
 
-    _userSubscription = _service.getUsersStream().listen(
-          (userList) {
+    _userSubscription = _service.getUsersStream(companyId).listen(
+      (userList) {
         _allUsers = userList;
         _isLoading = false;
         _error = null;
@@ -63,54 +63,92 @@ class UserProvider with ChangeNotifier {
       },
       onError: (err) {
         _isLoading = false;
-        _error = 'Erro ao sincronizar lista de usuários.';
+        _error = 'Erro ao sincronizar equipe.';
         notifyListeners();
       },
     );
   }
 
-  /// Atualiza o termo de busca (usado no campo de pesquisa da UI)
-  void searchUsers(String term) {
-    _searchTerm = term.trim();
-    notifyListeners();
+  void initInviteStream(String userId) {
+    _inviteSubscription?.cancel();
+    _inviteSubscription = _service.getPendingInvites(userId).listen((invites) {
+      _pendingInvites = invites;
+      notifyListeners();
+    });
   }
 
-  // --- OPERAÇÕES ---
+  Future<User?> findUserByEmail(String email) => _service.findUserByEmail(email);
 
-  /// Salva ou atualiza um usuário (usando o UserService)
+  /// Envia um convite com validação de segurança do remetente
+  Future<void> sendInvite({
+    required String fromCompanyId,
+    required String fromCompanyName,
+    required String toUserId,
+    required String currentUserId,
+  }) async {
+    _setLoading(true);
+    _error = null;
+    try {
+      await _service.sendInvite(
+        fromCompanyId: fromCompanyId,
+        fromCompanyName: fromCompanyName,
+        toUserId: toUserId,
+        currentUserId: currentUserId,
+      );
+    } catch (e) {
+      _error = e.toString();
+      rethrow;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  /// Responde ao convite usando parâmetros nomeados para segurança
+  Future<void> respondToInvite({
+    required String inviteId,
+    required String status,
+    required User currentUser,
+    required String companyId,
+  }) async {
+    _setLoading(true);
+    _error = null;
+    try {
+      await _service.respondToInvite(
+        inviteId: inviteId,
+        status: status,
+        currentUser: currentUser,
+        companyId: companyId,
+      );
+    } catch (e) {
+      _error = e.toString();
+      rethrow;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
   Future<void> saveUser(User user) async {
+    _setLoading(true);
     try {
       await _service.saveUserData(user);
-    } catch (e) {
-      _error = 'Erro ao salvar usuário.';
-      notifyListeners();
-      rethrow;
+    } finally {
+      _setLoading(false);
     }
   }
 
-  /// Ativa/Desativa o usuário (Soft Delete)
   Future<void> toggleUserStatus(String userId, bool currentStatus) async {
-    try {
-      await _service.toggleUserStatus(userId, !currentStatus);
-    } catch (e) {
-      _error = 'Erro ao alterar status.';
-      notifyListeners();
-      rethrow;
-    }
+    await _service.toggleUserStatus(userId, !currentStatus);
   }
 
-  /// Busca um usuário na lista que já está na memória
-  User? findLocalUserById(String userId) {
-    try {
-      return _allUsers.firstWhere((u) => u.id == userId);
-    } catch (e) {
-      return null;
-    }
+  void _setLoading(bool value) {
+    _isLoading = value;
+    notifyListeners();
   }
 
   @override
   void dispose() {
     _userSubscription?.cancel();
+    _inviteSubscription?.cancel();
     super.dispose();
   }
 }

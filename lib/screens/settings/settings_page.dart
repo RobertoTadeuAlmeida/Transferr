@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:transferr/widgets/app_drawer.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -72,7 +73,7 @@ class _SettingsPageState extends State<SettingsPage> {
       // O AppBar já é estilizado pelo tema
       appBar: AppBar(
         title: const Text('Configurações'),
-      ),
+      ),drawer: const AppDrawer(),
       body: ListView(
         padding: const EdgeInsets.all(16.0),
         children: [

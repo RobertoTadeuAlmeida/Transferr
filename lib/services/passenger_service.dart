@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import '../models/passenger.dart';
+import '../models/enums.dart';
 import '../repositories/passenger_repository.dart';
 
 class PassengerService {
@@ -18,6 +19,7 @@ class PassengerService {
   }
 
   Future<void> deletePassenger(String passengerId) async {
+    if (passengerId.isEmpty) throw Exception("ID do passageiro inválido.");
     return _passengerRepo.deletePassenger(passengerId);
   }
 
@@ -25,13 +27,12 @@ class PassengerService {
   // SALVAMENTO E FINANCEIRO
   // ===========================================================================
 
-  /// Quita o valor total da passagem (Dar baixa total)
   Future<void> settleFullPayment({
     required String passengerId,
     required String excursionId,
     required double fullValue,
   }) async {
-    debugPrint("💰 SERVICE: Dando baixa total para o passageiro $passengerId");
+    if (fullValue < 0) throw Exception("O valor de quitação não pode ser negativo.");
 
     final batch = _firestore.batch();
     final excursionRef = _firestore.collection('excursoes').doc(excursionId);
@@ -48,16 +49,12 @@ class PassengerService {
       batch.update(masterRef, updates);
       batch.update(vacancyRef, updates);
 
-      // Importante: Como estamos forçando isPaid = true, incrementamos o contador
-      // Nota: O ideal é verificar se já não estava pago antes, mas para "dar baixa"
-      // assume-se que estava pendente.
       batch.update(excursionRef, {
         'assentosPagos': FieldValue.increment(1),
-        'faturamentoAtual': FieldValue.increment(0.0), // O sync global corrigirá depois
+        'atualizadoEm': FieldValue.serverTimestamp(),
       });
 
       await batch.commit();
-      debugPrint("✅ SERVICE: Baixa total realizada com sucesso.");
     } catch (e) {
       debugPrint("❌ SERVICE ERROR (settleFullPayment): $e");
       rethrow;
@@ -69,58 +66,78 @@ class PassengerService {
     String? excursionId,
     double? depositValue,
   }) async {
-    debugPrint("💾 SERVICE: Iniciando salvamento de ${passenger.name}");
+    final sanitizedName = passenger.name.trim();
+    final sanitizedSeat = passenger.seatNumber.trim().toUpperCase();
+
+    if (sanitizedName.isEmpty) throw Exception("O nome do passageiro é obrigatório.");
 
     try {
-      if (excursionId != null && passenger.seatNumber.isNotEmpty) {
-        final seatConflict = await _firestore
-            .collection('excursoes')
-            .doc(excursionId)
-            .collection('vagas')
-            .where('poltrona', isEqualTo: passenger.seatNumber)
-            .get();
-
-        if (seatConflict.docs.isNotEmpty &&
-            seatConflict.docs.first.id != passenger.id) {
-          throw Exception(
-            "A poltrona ${passenger.seatNumber} já está ocupada por outro passageiro.",
-          );
-        }
-      }
-
-      final savedId = await _passengerRepo.savePassenger(passenger);
-
-      if (excursionId != null) {
+      if (excursionId != null && excursionId.isNotEmpty) {
         final excursionRef = _firestore.collection('excursoes').doc(excursionId);
-        final vacancyRef = excursionRef.collection('vagas').doc(savedId);
-
         final excursionDoc = await excursionRef.get();
-        final double totalValue = (excursionDoc.data()?['precoBase'] ?? 0.0).toDouble();
-        final bool isFullyPaid = (depositValue ?? 0.0) >= totalValue;
+        
+        if (!excursionDoc.exists) throw Exception("Excursão não encontrada.");
+        
+        final double basePrice = (excursionDoc.data()?['precoBase'] ?? 0.0).toDouble();
+        final double finalDeposit = depositValue ?? 0.0;
+        
+        if (finalDeposit < 0) throw Exception("O valor pago não pode ser negativo.");
+        
+        // Travamento redundante de segurança
+        final double validDeposit = finalDeposit > basePrice ? basePrice : finalDeposit;
+        final bool isFullyPaid = validDeposit >= basePrice;
+
+        // Validação de Poltrona (Evitar duplicidade)
+        if (sanitizedSeat.isNotEmpty) {
+          final seatConflict = await excursionRef
+              .collection('vagas')
+              .where('poltrona', isEqualTo: sanitizedSeat)
+              .get();
+
+          if (seatConflict.docs.isNotEmpty && seatConflict.docs.first.id != passenger.id) {
+            throw Exception("A poltrona $sanitizedSeat já está ocupada.");
+          }
+        }
+
+        final savedId = await _passengerRepo.savePassenger(
+          passenger.copyWith(name: sanitizedName, seatNumber: sanitizedSeat)
+        );
+        
+        final finalVacancyRef = excursionRef.collection('vagas').doc(savedId);
 
         await _firestore.runTransaction((transaction) async {
-          final vacancySnap = await transaction.get(vacancyRef);
-          final bool isNewVacancy = !vacancySnap.exists;
+          final vacancySnap = await transaction.get(finalVacancyRef);
+          final bool isNew = !vacancySnap.exists;
+          final bool wasPaid = isNew ? false : (vacancySnap.data()?['isPaid'] ?? false);
 
-          transaction.set(vacancyRef, {
+          transaction.set(finalVacancyRef, {
             'id': savedId,
-            'poltrona': passenger.seatNumber,
-            'depositValue': depositValue ?? 0.0,
+            'poltrona': sanitizedSeat,
+            'depositValue': validDeposit,
             'isPaid': isFullyPaid,
-            'statusEmbarque': 'Pendente',
+            'statusEmbarque': BoardingStatus.aguardando.value,
             'lastUpdate': FieldValue.serverTimestamp(),
           }, SetOptions(merge: true));
 
-          if (isNewVacancy) {
+          // Atualiza contadores da excursão baseado na mudança de estado
+          if (isNew) {
             transaction.update(excursionRef, {
               'assentosReservados': FieldValue.increment(1),
               if (isFullyPaid) 'assentosPagos': FieldValue.increment(1),
             });
+          } else if (!wasPaid && isFullyPaid) {
+            // Se já existia mas acabou de pagar agora
+            transaction.update(excursionRef, {'assentosPagos': FieldValue.increment(1)});
+          } else if (wasPaid && !isFullyPaid) {
+            // Se estava pago e o valor foi reduzido (raro, mas possível)
+            transaction.update(excursionRef, {'assentosPagos': FieldValue.increment(-1)});
           }
         });
+      } else {
+        await _passengerRepo.savePassenger(
+          passenger.copyWith(name: sanitizedName, seatNumber: sanitizedSeat)
+        );
       }
-
-      debugPrint("✅ SERVICE: Passageiro e Vaga salvos com sucesso.");
     } catch (e) {
       debugPrint("❌ SERVICE ERROR (savePassenger): $e");
       rethrow;
@@ -138,22 +155,33 @@ class PassengerService {
     required double totalValue,
     required String? seatNumber,
   }) async {
+    if (depositValue < 0) throw Exception("Valor inválido.");
+    
+    final double safeDeposit = depositValue > totalValue ? totalValue : depositValue;
+    final String safeSeat = (seatNumber ?? '').trim().toUpperCase();
+
     final excursionRef = _firestore.collection('excursoes').doc(excursionId);
     final vacancyRef = excursionRef.collection('vagas').doc(passengerId);
     final masterRef = _firestore.collection('passageiros').doc(passengerId);
-    final bool isFullyPaid = depositValue >= totalValue;
+    final bool isFullyPaid = safeDeposit >= totalValue;
 
     try {
       await _firestore.runTransaction((transaction) async {
         transaction.set(vacancyRef, {
           'id': passengerId,
-          'depositValue': depositValue,
+          'depositValue': safeDeposit,
           'isPaid': isFullyPaid,
-          'poltrona': seatNumber,
+          'poltrona': safeSeat,
           'dataReserva': FieldValue.serverTimestamp(),
-          'statusEmbarque': 'Pendente',
+          'statusEmbarque': BoardingStatus.aguardando.value,
         });
-        transaction.update(masterRef, {'excursionId': excursionId});
+        
+        transaction.update(masterRef, {
+          'excursionId': excursionId,
+          'poltrona': safeSeat,
+          'lastUpdate': FieldValue.serverTimestamp(),
+        });
+
         transaction.update(excursionRef, {
           'assentosReservados': FieldValue.increment(1),
           if (isFullyPaid) 'assentosPagos': FieldValue.increment(1),
@@ -178,24 +206,29 @@ class PassengerService {
 
       final bool wasPaid = vacancyDoc.data()?['isPaid'] ?? false;
       final batch = _firestore.batch();
+      
       batch.delete(vacancyRef);
+      
       batch.update(masterRef, {
-        'excursionId': '',
-        'seatNumber': '',
+        'excursionId': null,
+        'poltrona': '',
         'depositValue': 0.0,
         'isPaid': false,
-        'statusEmbarque': 'Pendente',
+        'statusEmbarque': BoardingStatus.aguardando.value,
       });
+
       batch.update(excursionRef, {
         'assentosReservados': FieldValue.increment(-1),
         if (wasPaid) 'assentosPagos': FieldValue.increment(-1),
       });
+
       await batch.commit();
     } catch (e) {
       rethrow;
     }
   }
 
+  /// OTIMIZADO: Busca passageiros em paralelo para melhor performance
   Stream<List<Passenger>> watchPassengersForExcursion(String excursionId) {
     return _firestore
         .collection('excursoes')
@@ -203,16 +236,23 @@ class PassengerService {
         .collection('vagas')
         .snapshots()
         .asyncMap((snapshot) async {
-          List<Passenger> passengers = [];
-          for (var doc in snapshot.docs) {
+          
+          // Dispara todas as buscas simultaneamente (Parallel processing)
+          Future<Passenger?> fetchMaster(QueryDocumentSnapshot<Object?> doc) async {
             final mestre = await _passengerRepo.getPassengerById(doc.id);
-            if (mestre != null) {
-              final docData = doc.data();
-              docData.removeWhere((key, value) => value is FieldValue);
-              final combinedData = {...mestre.toMap(), ...docData};
-              passengers.add(Passenger.fromMap(doc.id, combinedData));
-            }
+            if (mestre == null) return null;
+            
+            final docData = doc.data() as Map<String, dynamic>;
+            // Remove FieldValues locais para evitar erros de conversão no model
+            docData.removeWhere((key, value) => value is FieldValue);
+            
+            final combinedData = {...mestre.toMap(), ...docData};
+            return Passenger.fromMap(doc.id, combinedData);
           }
+
+          final results = await Future.wait(snapshot.docs.map(fetchMaster));
+          
+          final List<Passenger> passengers = results.whereType<Passenger>().toList();
           passengers.sort((a, b) => a.name.compareTo(b.name));
           return passengers;
         });
@@ -224,7 +264,17 @@ class PassengerService {
     Map<String, dynamic>? updates,
     bool? justFinishedPaying,
   }) async {
-    if (updates == null) return;
+    if (updates == null || updates.isEmpty) return;
+    
+    if (updates.containsKey('depositValue')) {
+      final excursionDoc = await _firestore.collection('excursoes').doc(excursionId).get();
+      final double basePrice = (excursionDoc.data()?['precoBase'] ?? 0.0).toDouble();
+      final double newVal = (updates['depositValue'] as num).toDouble();
+      
+      if (newVal < 0) throw Exception("Valor negativo não permitido.");
+      if (newVal > basePrice) updates['depositValue'] = basePrice;
+    }
+
     final Map<String, dynamic> firestoreUpdates = Map.from(updates);
     firestoreUpdates['lastUpdate'] = FieldValue.serverTimestamp();
 
@@ -238,25 +288,15 @@ class PassengerService {
       batch.update(vacancyRef, firestoreUpdates);
 
       if (justFinishedPaying == true) {
-        batch.update(excursionRef, {'assentosPagos': FieldValue.increment(1)});
+        batch.update(excursionRef, {
+          'assentosPagos': FieldValue.increment(1),
+          'atualizadoEm': FieldValue.serverTimestamp(),
+        });
       }
 
       await batch.commit();
     } catch (e) {
       rethrow;
-    }
-  }
-
-  Future<void> finalizeTrip(String passengerId) async {
-    try {
-      await _passengerRepo.updateMasterData(passengerId, {
-        'totalViagens': FieldValue.increment(1),
-        'excursionId': null,
-        'poltrona': null,
-        'statusEmbarque': null,
-      });
-    } catch (e) {
-      debugPrint("❌ SERVICE ERROR (finalizeTrip): $e");
     }
   }
 }

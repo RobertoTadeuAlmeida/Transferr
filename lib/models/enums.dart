@@ -6,7 +6,7 @@ enum UserRole { admin, agente }
 /// Status da Excursão com metadados integrados
 enum ExcursionStatus {
   programada('Programada', Colors.blue, Icons.event_note),
-  emAndamento('Em Andamento', Colors.orange, Icons.directions_bus),
+  emAndamento('EmAndamento', Colors.orange, Icons.directions_bus),
   concluida('Concluída', Colors.green, Icons.check_circle_outline),
   cancelada('Cancelada', Colors.red, Icons.cancel_outlined);
 

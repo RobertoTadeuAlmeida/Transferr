@@ -10,7 +10,7 @@ import 'package:currency_text_input_formatter/currency_text_input_formatter.dart
 
 class AddPassengerPage extends StatefulWidget {
   final String excursionId;
-  final double? excursionPrice; // Preço total da viagem para validação
+  final double? excursionPrice; 
   final Passenger? passenger;
 
   const AddPassengerPage({
@@ -86,31 +86,6 @@ class _AddPassengerPageState extends State<AddPassengerPage> {
     if (_selectedBirthDate != null) _calculateAge(_selectedBirthDate!);
   }
 
-  bool _isValidCPF(String cpf) {
-    if (cpf.length != 11 || RegExp(r'^(\d)\1{10}$').hasMatch(cpf)) return false;
-    List<int> numbers = cpf.split('').map(int.parse).toList();
-
-    // Cálculo do primeiro dígito verificador
-    int sum = 0;
-    for (int i = 0; i < 9; i++) {
-      sum += numbers[i] * (10 - i);
-    }
-    int res = sum % 11;
-    int digit1 = res < 2 ? 0 : 11 - res;
-    if (numbers[9] != digit1) return false;
-
-    // Cálculo do segundo dígito verificador
-    sum = 0;
-    for (int i = 0; i < 10; i++) {
-      sum += numbers[i] * (11 - i);
-    }
-    res = sum % 11;
-    int digit2 = res < 2 ? 0 : 11 - res;
-    if (numbers[10] != digit2) return false;
-
-    return true;
-  }
-
   void _calculateAge(DateTime birthDate) {
     final today = DateTime.now();
     int age = today.year - birthDate.year;
@@ -121,47 +96,39 @@ class _AddPassengerPageState extends State<AddPassengerPage> {
     setState(() => _isMinor = age < 18);
   }
 
-  Future<void> _submitForm() async {
-    if (!_formKey.currentState!.validate()) return;
+  /// Corrige o valor automaticamente se ultrapassar o preço da excursão
+  void _onDepositChanged(String value) {
+    if (widget.excursionPrice == null) return;
 
-    final isExcursionFlow = widget.excursionId.isNotEmpty;
-    final double deposit = _currencyFormatter.getUnformattedValue().toDouble();
+    final double currentVal = _currencyFormatter.getUnformattedValue().toDouble();
+    
+    if (currentVal > widget.excursionPrice!) {
+      // Se maior, trava no valor máximo
+      final String formattedMax = _currencyFormatter.formatDouble(widget.excursionPrice!);
+      
+      // Atualiza o controller e posiciona o cursor no final
+      _depositController.value = TextEditingValue(
+        text: formattedMax,
+        selection: TextSelection.collapsed(offset: formattedMax.length),
+      );
 
-    if (isExcursionFlow && widget.excursionPrice != null) {
-      if (deposit > widget.excursionPrice!) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Icon(Icons.warning_amber_rounded, color: Colors.white),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    'O valor (R\$ ${deposit.toStringAsFixed(2)}) excede o preço da excursão (R\$ ${widget.excursionPrice!.toStringAsFixed(2)}).',
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ],
-            ),
-            backgroundColor: AppTheme.errorColor,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-        return;
-      }
-    }
-
-    if (isExcursionFlow && deposit <= 0) {
+      // Feedback visual rápido
+      ScaffoldMessenger.of(context).clearSnackBars();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'É necessário informar o valor pago (mesmo que seja R\$ 0,01).',
-          ),
-          backgroundColor: AppTheme.errorColor,
+        SnackBar(
+          content: Text('Valor ajustado para o máximo da excursão: $formattedMax'),
+          duration: const Duration(seconds: 1),
+          backgroundColor: AppTheme.primaryColor,
         ),
       );
-      return;
     }
+  }
+
+  Future<void> _submitForm() async {
+    // Validação mínima: apenas campos vazios obrigatórios
+    if (!_formKey.currentState!.validate()) return;
+
+    final double deposit = _currencyFormatter.getUnformattedValue().toDouble();
 
     setState(() => _isLoading = true);
 
@@ -197,6 +164,16 @@ class _AddPassengerPageState extends State<AddPassengerPage> {
       if (success && mounted) {
         Navigator.pop(context);
       }
+    } catch (e) {
+      if (mounted) {
+        final errorMessage = e.toString().replaceFirst('Exception: ', '');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMessage),
+            backgroundColor: AppTheme.errorColor,
+          ),
+        );
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -220,11 +197,7 @@ class _AddPassengerPageState extends State<AddPassengerPage> {
               child: ListView(
                 padding: const EdgeInsets.all(24),
                 children: [
-                  _buildSectionHeader(
-                    context,
-                    Icons.person_outline,
-                    'Identificação',
-                  ),
+                  _buildSectionHeader(context, Icons.person_outline, 'Identificação'),
                   TextFormField(
                     controller: _nameController,
                     decoration: const InputDecoration(
@@ -232,7 +205,7 @@ class _AddPassengerPageState extends State<AddPassengerPage> {
                       prefixIcon: Icon(Icons.badge_outlined),
                     ),
                     textCapitalization: TextCapitalization.words,
-                    validator: (v) => v!.isEmpty ? 'Campo obrigatório' : null,
+                    validator: (v) => v!.isEmpty ? 'Obrigatório' : null,
                   ),
                   const SizedBox(height: 16),
                   Row(
@@ -243,28 +216,8 @@ class _AddPassengerPageState extends State<AddPassengerPage> {
                           controller: _docController,
                           inputFormatters: [_docMask],
                           keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(
-                            labelText: 'CPF/RG',
-                          ),
-                          validator: (v) {
-                            if (v == null || v.isEmpty) return 'Obrigatório';
-
-                            // Remove caracteres especiais para validar apenas os números
-                            final numbers = v.replaceAll(RegExp(r'[^0-9]'), '');
-
-                            // Regra para CPF (11 números após limpar a máscara)
-                            if (numbers.length == 11) {
-                              if (!_isValidCPF(numbers)) {
-                                return 'CPF Inválido';
-                              }
-                            }
-                            // Regra para RG (Geralmente entre 7 a 9 dígitos)
-                            else if (numbers.length < 7) {
-                              return 'Documento muito curto';
-                            }
-
-                            return null;
-                          },
+                          decoration: const InputDecoration(labelText: 'CPF/RG'),
+                          validator: (v) => v!.isEmpty ? 'Obrigatório' : null,
                         ),
                       ),
                       const SizedBox(width: 16),
@@ -280,6 +233,7 @@ class _AddPassengerPageState extends State<AddPassengerPage> {
                       labelText: 'WhatsApp/Celular',
                       prefixIcon: Icon(Icons.phone_outlined),
                     ),
+                    validator: (v) => v!.isEmpty ? 'Obrigatório' : null,
                   ),
 
                   if (isExcursionFlow) ...[
@@ -296,9 +250,8 @@ class _AddPassengerPageState extends State<AddPassengerPage> {
                         Expanded(
                           child: TextFormField(
                             controller: _seatController,
-                            readOnly: true, // Impede digitar manualmente
+                            readOnly: true,
                             onTap: () async {
-                              // Abre a sua tela de mapa de assentos (SeatMap)
                               final selectedSeat = await Navigator.pushNamed(
                                 context,
                                 '/map-seats',
@@ -308,17 +261,12 @@ class _AddPassengerPageState extends State<AddPassengerPage> {
                                   'isSelectionMode': true,
                                 },
                               );
-
-                              if (selectedSeat != null &&
-                                  selectedSeat is String) {
-                                setState(() {
-                                  _seatController.text = selectedSeat;
-                                });
+                              if (selectedSeat != null && selectedSeat is String) {
+                                setState(() => _seatController.text = selectedSeat);
                               }
                             },
                             decoration: const InputDecoration(
                               labelText: 'Assento',
-                              hintText: 'Toque para selecionar',
                               prefixIcon: Icon(Icons.event_seat),
                               suffixIcon: Icon(Icons.arrow_drop_down),
                             ),
@@ -326,75 +274,22 @@ class _AddPassengerPageState extends State<AddPassengerPage> {
                         ),
                         const SizedBox(width: 16),
                         Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              TextFormField(
-                                controller: _depositController,
-                                inputFormatters: [_currencyFormatter],
-                                keyboardType: TextInputType.number,
-                                style: const TextStyle(
-                                  color: AppTheme.successColor,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                                decoration: InputDecoration(
-                                  labelText: 'Valor Pago (R\$)',
-                                  prefixIcon: const Icon(
-                                    Icons.payments_outlined,
-                                    color: AppTheme.successColor,
-                                  ),
-                                  helperText: widget.excursionPrice != null
-                                      ? 'Preço: R\$ ${widget.excursionPrice!.toStringAsFixed(2)}'
-                                      : 'Valor recebido',
-                                  helperStyle: const TextStyle(
-                                    color: Colors.white54,
-                                    fontSize: 10,
-                                  ),
-                                ),
-                              ),
-                              if (widget.excursionPrice != null)
-                                TextButton.icon(
-                                  onPressed: () {
-                                    setState(() {
-                                      _depositController.text =
-                                          _currencyFormatter.formatDouble(
-                                            widget.excursionPrice!,
-                                          );
-                                    });
-                                  },
-                                  icon: const Icon(
-                                    Icons.check_circle_outline,
-                                    size: 14,
-                                  ),
-                                  label: const Text(
-                                    'PAGAMENTO TOTAL',
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.bold,
-                                      letterSpacing: 0.5,
-                                    ),
-                                  ),
-                                  style: OutlinedButton.styleFrom(
-                                    foregroundColor: AppTheme.successColor,
-                                    backgroundColor: AppTheme.successColor
-                                        .withValues(alpha: 0.05),
-                                    side: BorderSide(
-                                      color: AppTheme.successColor.withValues(
-                                        alpha: 0.5,
-                                      ),
-                                      width: 1.2,
-                                    ),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 0,
-                                    ),
-                                    visualDensity: VisualDensity.compact,
-                                  ),
-                                ),
-                            ],
+                          child: TextFormField(
+                            controller: _depositController,
+                            inputFormatters: [_currencyFormatter],
+                            keyboardType: TextInputType.number,
+                            onChanged: _onDepositChanged, // Correção automática aqui
+                            style: const TextStyle(
+                              color: AppTheme.successColor,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            decoration: InputDecoration(
+                              labelText: 'Valor Pago',
+                              prefixIcon: const Icon(Icons.payments_outlined, color: AppTheme.successColor),
+                              helperText: widget.excursionPrice != null
+                                  ? 'Máx: R\$ ${widget.excursionPrice!.toStringAsFixed(2)}'
+                                  : null,
+                            ),
                           ),
                         ),
                       ],
@@ -411,17 +306,15 @@ class _AddPassengerPageState extends State<AddPassengerPage> {
                     ),
                     TextFormField(
                       controller: _guardianNameController,
-                      decoration: const InputDecoration(
-                        labelText: 'Nome do Responsável',
-                      ),
+                      decoration: const InputDecoration(labelText: 'Nome do Responsável'),
+                      validator: (v) => _isMinor && v!.isEmpty ? 'Obrigatório' : null,
                     ),
                     const SizedBox(height: 16),
                     TextFormField(
                       controller: _guardianPhoneController,
                       inputFormatters: [_phoneMask],
-                      decoration: const InputDecoration(
-                        labelText: 'Contato Responsável',
-                      ),
+                      decoration: const InputDecoration(labelText: 'Contato Responsável'),
+                      validator: (v) => _isMinor && v!.isEmpty ? 'Obrigatório' : null,
                     ),
                   ],
 
@@ -429,9 +322,7 @@ class _AddPassengerPageState extends State<AddPassengerPage> {
                   ElevatedButton(
                     onPressed: _submitForm,
                     child: Text(
-                      widget.passenger == null
-                          ? 'FINALIZAR CADASTRO'
-                          : 'SALVAR ALTERAÇÕES',
+                      widget.passenger == null ? 'FINALIZAR CADASTRO' : 'SALVAR ALTERAÇÕES',
                     ),
                   ),
                 ],
@@ -440,12 +331,7 @@ class _AddPassengerPageState extends State<AddPassengerPage> {
     );
   }
 
-  Widget _buildSectionHeader(
-    BuildContext context,
-    IconData icon,
-    String title, {
-    Color? color,
-  }) {
+  Widget _buildSectionHeader(BuildContext context, IconData icon, String title, {Color? color}) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: Row(

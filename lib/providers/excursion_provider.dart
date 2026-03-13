@@ -14,13 +14,17 @@ class ExcursionProvider with ChangeNotifier {
   List<Excursion> _excursions = [];
   bool _isLoading = false;
   StreamSubscription? _excursionSubscription;
-  String? _currentUserId;
+  String? _currentCompanyId; // Alterado de currentUserId para currentCompanyId
 
   // --- GETTERS PÚBLICOS ---
-  List<Excursion> get excursions => _excursions;
+  List<Excursion> get allExcursions => _excursions;
   bool get isLoading => _isLoading;
 
-  List<Excursion> get activeExcursions => _excursions
+  List<Excursion> get excursions => _excursions.where((e) => !e.isDeleted).toList();
+
+  List<Excursion> get archivedExcursions => _excursions.where((e) => e.isDeleted).toList();
+
+  List<Excursion> get activeExcursions => excursions
       .where((ex) =>
           ex.status == ExcursionStatus.programada ||
           ex.status == ExcursionStatus.emAndamento)
@@ -34,70 +38,74 @@ class ExcursionProvider with ChangeNotifier {
   // SINCRONIZAÇÃO EM TEMPO REAL
   // =========================================================================
 
-  void listenToExcursions(String? uid) {
-    if (uid == null || uid.isEmpty) {
-      debugPrint("[ExcursionProvider] 🛑 Logout detectado ou UID vazio.");
+  /// Escuta as excursões pela Empresa (companyId) para bater com as Security Rules
+  void listenToExcursions(String? companyId) {
+    if (companyId == null || companyId.isEmpty) {
       _excursions = [];
-      _currentUserId = null;
+      _currentCompanyId = null;
       _excursionSubscription?.cancel();
       _excursionSubscription = null;
       notifyListeners();
       return;
     }
 
-    if (_currentUserId == uid && _excursionSubscription != null) return;
+    if (_currentCompanyId == companyId && _excursionSubscription != null) return;
 
-    debugPrint("[ExcursionProvider] 📡 Iniciando escuta para o usuário: $uid");
-    _currentUserId = uid;
+    _currentCompanyId = companyId;
     _setLoading(true);
     _excursionSubscription?.cancel();
 
-    _excursionSubscription = _service.watchExcursions(responsibleId: uid).listen(
+    // Chamada alterada para usar companyId
+    _excursionSubscription = _service.watchExcursions(companyId: companyId).listen(
       (data) {
-        debugPrint(
-            "[ExcursionProvider] ✅ Recebidas ${data.length} excursões do Firebase.");
         _excursions = data;
         _isLoading = false;
         notifyListeners();
       },
       onError: (error) {
-        debugPrint("[ExcursionProvider] ❌ Erro na Stream de Excursões: $error");
         _setLoading(false);
       },
     );
   }
 
-  /// Sincroniza os contadores (vagas/pagos).
-  Future<void> syncExcursionStats(String excursionId) async {
-    debugPrint(
-        "[ExcursionProvider] 🔄 Solicitando sincronização para: $excursionId");
+  Future<void> startExcursion(String excursionId) async {
+    _setLoading(true);
     try {
-      await _service.syncExcursionCounters(excursionId);
-      debugPrint("[ExcursionProvider] ✨ Sincronização de contadores finalizada.");
+      await _service.startExcursion(excursionId);
     } catch (e) {
-      debugPrint("[ExcursionProvider] ❌ Erro ao sincronizar estatísticas: $e");
+      rethrow;
+    } finally {
+      _setLoading(false);
     }
   }
 
-  /// Calcula o progresso de pagamento de um passageiro e atualiza os totais.
-  /// Retorna os dados para uso imediato (ex: LinearProgressIndicator).
+  Future<void> finalizeExcursion(String excursionId) async {
+    _setLoading(true);
+    try {
+      await _service.finalizeExcursion(excursionId);
+    } catch (e) {
+      rethrow;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  Future<void> syncExcursionStats(String excursionId) async {
+    try {
+      await _service.syncExcursionCounters(excursionId);
+    } catch (e) {
+      debugPrint("❌ Erro ao sincronizar stats: $e");
+    }
+  }
+
   Future<Map<String, dynamic>> refreshPassengerPaymentProgress(
     String passengerId,
     String excursionId,
   ) async {
-    debugPrint(
-        "[ExcursionProvider] 💰 Calculando progresso de pagamento: $passengerId");
-    try {
-      final result = await _service.calculatePassengerPaymentProgress(
-        passengerId,
-        excursionId,
-      );
-      // A Stream de excursões detectará a mudança nos contadores e atualizará a UI automaticamente.
-      return result;
-    } catch (e) {
-      debugPrint("[ExcursionProvider] ❌ Erro ao calcular progresso: $e");
-      rethrow;
-    }
+    return await _service.calculatePassengerPaymentProgress(
+      passengerId,
+      excursionId,
+    );
   }
 
   // =========================================================================
@@ -106,13 +114,11 @@ class ExcursionProvider with ChangeNotifier {
 
   Future<void> addExcursion(Excursion excursion) async {
     _setLoading(true);
-    debugPrint("[ExcursionProvider] ➕ Adicionando nova excursão...");
     try {
-      final newExcursion = excursion.copyWith(idResponsible: _currentUserId);
+      // Importante: Ao criar, vinculamos à empresa atual
+      final newExcursion = excursion.copyWith(empresa: _currentCompanyId); 
       await _service.createExcursion(newExcursion);
-      debugPrint("[ExcursionProvider] ✅ Excursão criada com sucesso.");
     } catch (e) {
-      debugPrint("[ExcursionProvider] ❌ Erro ao adicionar: $e");
       rethrow;
     } finally {
       _setLoading(false);
@@ -120,24 +126,18 @@ class ExcursionProvider with ChangeNotifier {
   }
 
   Future<void> updateExcursion(Excursion excursion) async {
-    debugPrint("[ExcursionProvider] 📝 Atualizando excursão: ${excursion.id}");
     try {
       await _service.updateExcursion(excursion);
-      debugPrint("[ExcursionProvider] ✅ Excursão atualizada.");
     } catch (e) {
-      debugPrint("[ExcursionProvider] ❌ Erro ao atualizar: $e");
       rethrow;
     }
   }
 
   Future<void> deleteMultipleExcursions(List<String> ids) async {
     _setLoading(true);
-    debugPrint("[ExcursionProvider] 🗑️ Deletando ${ids.length} excursões...");
     try {
       await _service.deleteExcursions(ids);
-      debugPrint("[ExcursionProvider] ✅ Exclusão concluída.");
     } catch (e) {
-      debugPrint("[ExcursionProvider] ❌ Erro ao deletar: $e");
       rethrow;
     } finally {
       _setLoading(false);
@@ -154,8 +154,6 @@ class ExcursionProvider with ChangeNotifier {
     required double value,
     required String category,
   }) async {
-    debugPrint(
-        "[ExcursionProvider] 💸 Adicionando despesa de R\$ $value em $excursionId");
     try {
       final newExpense = Expense(
         id: '',
@@ -167,7 +165,6 @@ class ExcursionProvider with ChangeNotifier {
 
       await _service.addExpense(excursionId, newExpense);
     } catch (e) {
-      debugPrint("[ExcursionProvider] ❌ Erro ao adicionar despesa: $e");
       rethrow;
     }
   }
@@ -176,24 +173,17 @@ class ExcursionProvider with ChangeNotifier {
     try {
       await _service.deleteExpense(excursionId, expenseId);
     } catch (e) {
-      debugPrint("[ExcursionProvider] Erro ao deletar despesa: $e");
       rethrow;
     }
   }
 
-  /// Ouve despesas em tempo real.
   Stream<List<Expense>> watchExpenses(String excursionId) {
     return _service.watchExpenses(excursionId);
   }
 
-  /// Ouve o faturamento total calculado pelo Service.
   Stream<double> getTotalRevenueStream(String excursionId) {
     return _service.streamTotalRevenue(excursionId);
   }
-
-  // =========================================================================
-  // MÉTODOS AUXILIARES
-  // =========================================================================
 
   void _setLoading(bool value) {
     if (_isLoading == value) return;
@@ -203,9 +193,8 @@ class ExcursionProvider with ChangeNotifier {
 
   @override
   void dispose() {
-    debugPrint("[ExcursionProvider] ⚰️ Dispose chamado.");
     _excursionSubscription?.cancel();
-    _currentUserId = null;
+    _currentCompanyId = null;
     super.dispose();
   }
 }

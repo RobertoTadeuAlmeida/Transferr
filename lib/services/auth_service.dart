@@ -1,50 +1,71 @@
 import 'package:firebase_auth/firebase_auth.dart' as fb_auth;
 import '../models/user.dart';
-import '../repositories/user_repository.dart'; // Importação atualizada
+import '../repositories/user_repository.dart';
 
 class AuthService {
-  final UserRepository _userRepo; // Repositório unificado
+  final UserRepository _userRepo;
 
   AuthService(this._userRepo);
 
-  /// Expõe a stream de estado de autenticação
   Stream<fb_auth.User?> get authStateChanges => _userRepo.authStateChanges;
+  fb_auth.User? get currentUser => fb_auth.FirebaseAuth.instance.currentUser;
 
-  /// Busca os dados completos do usuário
-  Future<User?> getUserData(String uid) {
-    return _userRepo.getUserData(uid);
-  }
+  Future<User?> getUserData(String uid) => _userRepo.getUserData(uid);
+  Future<void> logout() => _userRepo.signOut();
 
-  /// Desloga o usuário
-  Future<void> logout() {
-    return _userRepo.signOut();
-  }
-
-  /// Orquestra o Cadastro Completo: Auth + Firestore + Metadados + Rollback
-  Future<void> register(User user, String password) async {
-    fb_auth.UserCredential? userCredential;
-
+  Future<void> sendPasswordReset(String email) async {
     try {
-      // 1. Criar no Firebase Auth (Apenas credenciais)
+      await fb_auth.FirebaseAuth.instance.sendPasswordResetEmail(email: email.trim());
+    } catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  /// Troca a empresa ativa e garante que o nome da nova empresa seja buscado
+  Future<void> switchActiveCompany(String uid, String newCompanyId) async {
+    try {
+      String newName = "Sem Empresa";
+      if (newCompanyId.isNotEmpty) {
+        newName = await _userRepo.getCompanyName(newCompanyId);
+      }
+
+      await _userRepo.updateUserData(uid, {
+        'empresa': newCompanyId,
+        'nomeEmpresa': newName,
+      });
+    } catch (e) {
+      throw _handleError(e);
+    }
+  }
+
+  Future<void> register(User user, String password) async {
+    // REGRA: Usuários comuns precisam estar vinculados a uma empresa no cadastro
+    if (!user.isAdmin && user.company.isEmpty) {
+      throw Exception("Obrigatório vincular-se a uma empresa para realizar o cadastro.");
+    }
+
+    fb_auth.UserCredential? userCredential;
+    try {
       userCredential = await _userRepo.signUp(user.email, password);
       final String uid = userCredential.user!.uid;
+      
+      // ADMIN: Dono da empresa (ID = seu UID). Agente: Usa o ID fornecido.
+      final String companyId = user.isAdmin ? uid : user.company;
+      
+      // Se for ADMIN, o texto digitado no campo empresa é o nome fantasia.
+      // Se for Agente, ele entra como "Aguardando Vínculo" até carregar o nome real.
+      final String companyName = user.isAdmin ? user.company : "Aguardando Vínculo";
 
-      // 2. Preparar modelo com o UID gerado e ID da empresa
-      // Se a empresa não for passada, usamos o próprio UID (padrão para novos Admins)
       final userWithId = user.copyWith(
         id: uid,
-        company: user.company.isEmpty ? uid : user.company,
+        company: companyId,
+        companyName: companyName,
+        companies: [companyId], 
       );
 
-      // 3. Salvar os dados complementares no Firestore via UserRepository
       await _userRepo.saveUserData(userWithId);
-
-      // 4. Atualizar metadados do Firebase Auth (facilita identificação no console)
       await userCredential.user?.updateDisplayName(user.name);
-
     } catch (e) {
-      // ROLLBACK: Se o Firestore ou metadados falharem, removemos do Auth
-      // para evitar usuários "fantasmas" (com login mas sem dados no banco)
       if (userCredential?.user != null) {
         await _userRepo.deleteAuthUser(userCredential!.user);
       }
@@ -52,7 +73,6 @@ class AuthService {
     }
   }
 
-  /// Realiza o login utilizando o repositório
   Future<void> login(String email, String password) async {
     try {
       await _userRepo.signIn(email, password);
@@ -61,34 +81,29 @@ class AuthService {
     }
   }
 
-  /// Tratamento de erros amigável para o usuário final
+  Future<void> updateProfile({required String name, String? photoUrl}) async {
+    final user = currentUser;
+    if (user == null) throw Exception("Nenhum usuário logado.");
+    try {
+      await user.updateDisplayName(name);
+      if (photoUrl != null) await user.updatePhotoURL(photoUrl);
+      await _userRepo.updateUserData(user.uid, {
+        'nome': name,
+        if (photoUrl != null) 'photoUrl': photoUrl,
+      });
+    } catch (e) {
+      throw _handleError(e);
+    }
+  }
+
   String _handleError(dynamic e) {
     if (e is fb_auth.FirebaseAuthException) {
       switch (e.code) {
-        case 'email-already-in-use':
-          return 'Este e-mail já está sendo utilizado por outra conta.';
-        case 'invalid-email':
-          return 'O formato do e-mail é inválido.';
-        case 'weak-password':
-          return 'A senha fornecida é muito fraca.';
-        case 'user-not-found':
-          return 'Nenhum usuário encontrado com este e-mail.';
-        case 'wrong-password':
-          return 'Senha incorreta. Tente novamente.';
-        case 'user-disabled':
-          return 'Esta conta foi desativada.';
-        case 'too-many-requests':
-          return 'Muitas tentativas. Tente novamente mais tarde.';
-        default:
-          return e.message ?? 'Ocorreu um erro inesperado na autenticação.';
+        case 'email-already-in-use': return 'Este e-mail já está em uso.';
+        case 'network-request-failed': return 'Erro de conexão com a internet.';
+        default: return e.message ?? 'Erro inesperado na autenticação.';
       }
     }
-
-    // Erros de permissão do Firestore ou rede
-    if (e.toString().contains('permission-denied')) {
-      return 'Você não tem permissão para realizar esta operação.';
-    }
-
     return e.toString().replaceFirst('Exception: ', '');
   }
 }

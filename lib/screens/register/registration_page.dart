@@ -17,15 +17,12 @@ class _RegistrationPageState extends State<RegistrationPage> {
   final PageController _pageController = PageController();
   int _currentStep = 0;
 
-  // Form Keys para cada passo
   final _formKey1 = GlobalKey<FormState>();
   final _formKey2 = GlobalKey<FormState>();
   final _formKey3 = GlobalKey<FormState>();
 
-  // Perfil selecionado
   String _selectedProfile = 'ADMIN';
 
-  // Controladores centralizados
   final Map<String, TextEditingController> _controllers = {
     'company': TextEditingController(),
     'document': TextEditingController(),
@@ -35,6 +32,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
     'state': TextEditingController(),
     'city': TextEditingController(),
     'address': TextEditingController(),
+    'neighborhood': TextEditingController(),
     'number': TextEditingController(),
     'email': TextEditingController(),
     'password': TextEditingController(),
@@ -87,9 +85,9 @@ class _RegistrationPageState extends State<RegistrationPage> {
 
     final user = User(
       id: '',
-      company: _controllers['company']!.text,
-      name: _controllers['name']!.text,
-      email: _controllers['email']!.text,
+      company: _controllers['company']!.text.trim(),
+      name: _controllers['name']!.text.trim(),
+      email: _controllers['email']!.text.trim(),
       phone: _controllers['phone']!.text,
       document: _controllers['document']!.text,
       birthDate: DateTime.now(),
@@ -97,7 +95,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
       zipCode: _controllers['zipCode']!.text,
       address: _controllers['address']!.text,
       number: _controllers['number']!.text,
-      neighborhood: '',
+      neighborhood: _controllers['neighborhood']!.text,
       city: _controllers['city']!.text,
       state: _controllers['state']!.text,
       createdAt: DateTime.now(),
@@ -108,12 +106,20 @@ class _RegistrationPageState extends State<RegistrationPage> {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Cadastro realizado com sucesso!'), backgroundColor: Colors.green),
+        const SnackBar(
+          content: Text('Bem-vindo à Transferr! Cadastro realizado.'),
+          backgroundColor: Colors.green,
+          behavior: SnackBarBehavior.floating,
+        ),
       );
       Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
+        SnackBar(
+          content: Text(provider.errorMessage ?? e.toString()),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ),
       );
     }
   }
@@ -136,6 +142,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
           LinearProgressIndicator(
             value: (_currentStep + 1) / 3,
             backgroundColor: theme.primaryColor.withValues(alpha: 0.1),
+            minHeight: 6,
           ),
           Expanded(
             child: PageView(
@@ -153,16 +160,28 @@ class _RegistrationPageState extends State<RegistrationPage> {
               ],
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.all(24),
-            child: SizedBox(
-              width: double.infinity,
-              height: 55,
-              child: ElevatedButton(
-                onPressed: provider.isLoading ? null : _nextPage,
-                child: provider.isLoading
-                    ? const CircularProgressIndicator(color: Colors.white)
-                    : Text(_currentStep == 2 ? "FINALIZAR" : "PRÓXIMO"),
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              child: SizedBox(
+                width: double.infinity,
+                height: 56,
+                child: ElevatedButton(
+                  onPressed: provider.isLoading ? null : _nextPage,
+                  style: ElevatedButton.styleFrom(
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: provider.isLoading
+                      ? const SizedBox(
+                          height: 24,
+                          width: 24,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : Text(
+                          _currentStep == 2 ? "FINALIZAR CADASTRO" : "PRÓXIMO",
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                        ),
+                ),
               ),
             ),
           )

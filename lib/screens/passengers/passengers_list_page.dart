@@ -9,8 +9,13 @@ import '../../widgets/passenger_card.dart';
 
 class PassengersListPage extends StatefulWidget {
   final String excursionId;
+  final bool readOnly; // Novo parâmetro
 
-  const PassengersListPage({super.key, required this.excursionId});
+  const PassengersListPage({
+    super.key, 
+    required this.excursionId,
+    this.readOnly = false, // Padrão falso
+  });
 
   @override
   State<PassengersListPage> createState() => _PassengersListPageState();
@@ -35,22 +40,17 @@ class _PassengersListPageState extends State<PassengersListPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-
-    // O watch garante que a tela reconstrua se dados da excursão mudarem (contadores, etc)
     final excursionProvider = context.watch<ExcursionProvider>();
 
-    // Busca a instância da excursão atual para obter o preço base (usado nos filtros)
     final excursion = excursionProvider.excursions.cast<dynamic>().firstWhere(
           (e) => e.id == widget.excursionId,
       orElse: () => null,
     );
 
     if (excursion == null) {
-      // Se a excursão não for encontrada, mostra um estado de carregamento ou erro
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    // Captura a referência do provider aqui para usar no onTap do card de forma segura
     final excursionProviderForTap = context.read<ExcursionProvider>();
 
     return Scaffold(
@@ -71,7 +71,6 @@ class _PassengersListPageState extends State<PassengersListPage> {
             child: Consumer<PassengerProvider>(
               builder: (context, passengerProvider, child) {
                 return StreamBuilder<List<Passenger>>(
-                  // Este Stream é a "verdade absoluta" da sub-coleção 'vagas' no Firestore
                   stream: passengerProvider.watchPassengers(widget.excursionId),
                   builder: (context, snapshot) {
                     if (snapshot.connectionState == ConnectionState.waiting) {
@@ -119,18 +118,16 @@ class _PassengersListPageState extends State<PassengersListPage> {
                             passenger: passenger,
                             excursionId: widget.excursionId,
                             onTap: () async {
-                              // Aguarda retorno da tela de detalhes (pode ocorrer exclusão)
                               await Navigator.pushNamed(
                                 context,
                                 '/passenger-details',
                                 arguments: {
                                   'passenger': passenger,
                                   'excursionId': widget.excursionId,
+                                  'readOnly': widget.readOnly, // Propagar modo leitura
                                 },
                               );
-                              // Sincroniza ao retornar para atualizar contadores de vagas/pagos
-                              if (mounted) {
-                                // Usa a referência segura capturada fora do builder
+                              if (mounted && !widget.readOnly) {
                                 excursionProviderForTap.syncExcursionStats(widget.excursionId);
                               }
                             },
@@ -145,11 +142,14 @@ class _PassengersListPageState extends State<PassengersListPage> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _showAddOptions(context, excursion.basePrice?.toDouble() ?? 0.0),
-        backgroundColor: AppTheme.primaryColor,
-        child: const Icon(Icons.add, color: Colors.white, size: 30),
-      ),
+      // REGRA: Esconde o botão de adicionar se estiver em modo leitura
+      floatingActionButton: widget.readOnly 
+          ? null 
+          : FloatingActionButton(
+              onPressed: () => _showAddOptions(context, excursion.basePrice?.toDouble() ?? 0.0),
+              backgroundColor: AppTheme.primaryColor,
+              child: const Icon(Icons.add, color: Colors.white, size: 30),
+            ),
     );
   }
 
@@ -217,7 +217,6 @@ class _PassengersListPageState extends State<PassengersListPage> {
 
   void _showAddOptions(BuildContext context, double basePrice) {
     final theme = Theme.of(context);
-    // CAPTURA A REFERÊNCIA DO PROVIDER ANTES DO CÓDIGO ASSÍNCRONO
     final excursionProvider = context.read<ExcursionProvider>();
 
     showModalBottomSheet(
@@ -238,7 +237,7 @@ class _PassengersListPageState extends State<PassengersListPage> {
                 leading: const CircleAvatar(child: Icon(Icons.person_add)),
                 title: const Text('Novo Cadastro'),
                 onTap: () async {
-                  Navigator.pop(context); // Fecha o BottomSheet
+                  Navigator.pop(context); 
                   await Navigator.pushNamed(
                     context,
                     '/add-passenger',
@@ -247,7 +246,6 @@ class _PassengersListPageState extends State<PassengersListPage> {
                       'excursionPrice': basePrice
                     },
                   );
-                  // USA A REFERÊNCIA SEGURA APÓS O AWAIT
                   if (mounted) {
                     excursionProvider.syncExcursionStats(widget.excursionId);
                   }
@@ -258,7 +256,7 @@ class _PassengersListPageState extends State<PassengersListPage> {
                 leading: const CircleAvatar(child: Icon(Icons.person_search)),
                 title: const Text('Buscar no CRM'),
                 onTap: () async {
-                  Navigator.pop(context); // Fecha o BottomSheet
+                  Navigator.pop(context); 
                   await Navigator.pushNamed(
                     context,
                     '/global-passengers',
@@ -267,7 +265,6 @@ class _PassengersListPageState extends State<PassengersListPage> {
                       'excursionPrice': basePrice
                     },
                   );
-                  // USA A REFERÊNCIA SEGURA APÓS O AWAIT
                   if (mounted) {
                     excursionProvider.syncExcursionStats(widget.excursionId);
                   }
