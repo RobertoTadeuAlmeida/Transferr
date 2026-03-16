@@ -5,16 +5,17 @@ import '../../models/enums.dart';
 import '../../models/passenger.dart';
 import '../../providers/passenger_provider.dart';
 import '../../providers/excursion_provider.dart';
+import '../../providers/auth_provider.dart';
 import '../../widgets/passenger_card.dart';
 
 class PassengersListPage extends StatefulWidget {
   final String excursionId;
-  final bool readOnly; // Novo parâmetro
+  final bool readOnly;
 
   const PassengersListPage({
     super.key, 
     required this.excursionId,
-    this.readOnly = false, // Padrão falso
+    this.readOnly = false,
   });
 
   @override
@@ -41,6 +42,10 @@ class _PassengersListPageState extends State<PassengersListPage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final excursionProvider = context.watch<ExcursionProvider>();
+    
+    // OBTENÇÃO DA EMPRESA ATIVA
+    final authProvider = context.watch<AuthProvider>();
+    final companyId = authProvider.currentUser?.company ?? '';
 
     final excursion = excursionProvider.excursions.cast<dynamic>().firstWhere(
           (e) => e.id == widget.excursionId,
@@ -71,7 +76,8 @@ class _PassengersListPageState extends State<PassengersListPage> {
             child: Consumer<PassengerProvider>(
               builder: (context, passengerProvider, child) {
                 return StreamBuilder<List<Passenger>>(
-                  stream: passengerProvider.watchPassengers(widget.excursionId),
+                  // CORREÇÃO: Passando companyId para o stream
+                  stream: passengerProvider.watchPassengers(widget.excursionId, companyId),
                   builder: (context, snapshot) {
                     if (snapshot.connectionState == ConnectionState.waiting) {
                       return const Center(child: CircularProgressIndicator());
@@ -87,12 +93,17 @@ class _PassengersListPageState extends State<PassengersListPage> {
                       final nameMatch = _normalize(p.name).contains(_normalize(_searchQuery));
 
                       bool categoryMatch;
+                      // ESCALABILIDADE: Usa o saleValue (preço congelado) para o filtro de pendentes/confirmados
+                      final double targetPrice = p.saleValue > 0 
+                          ? p.saleValue 
+                          : (excursion.basePrice ?? 0).toDouble();
+
                       switch (_activeFilter) {
                         case PassengerFilter.pendentes:
-                          categoryMatch = p.depositValue < (excursion.basePrice ?? 0);
+                          categoryMatch = p.depositValue < targetPrice;
                           break;
                         case PassengerFilter.confirmados:
-                          categoryMatch = p.depositValue >= (excursion.basePrice ?? 0);
+                          categoryMatch = p.depositValue >= targetPrice;
                           break;
                         case PassengerFilter.menores:
                           categoryMatch = p.isMinor;
@@ -124,7 +135,7 @@ class _PassengersListPageState extends State<PassengersListPage> {
                                 arguments: {
                                   'passenger': passenger,
                                   'excursionId': widget.excursionId,
-                                  'readOnly': widget.readOnly, // Propagar modo leitura
+                                  'readOnly': widget.readOnly,
                                 },
                               );
                               if (mounted && !widget.readOnly) {
@@ -142,7 +153,6 @@ class _PassengersListPageState extends State<PassengersListPage> {
           ),
         ],
       ),
-      // REGRA: Esconde o botão de adicionar se estiver em modo leitura
       floatingActionButton: widget.readOnly 
           ? null 
           : FloatingActionButton(

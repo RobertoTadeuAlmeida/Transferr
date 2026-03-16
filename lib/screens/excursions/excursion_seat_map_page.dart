@@ -4,6 +4,7 @@ import 'package:transferr/config/theme/app_theme.dart';
 import 'package:transferr/models/passenger.dart';
 import 'package:transferr/providers/passenger_provider.dart';
 import 'package:transferr/providers/excursion_provider.dart';
+import 'package:transferr/providers/auth_provider.dart';
 
 class ExcursionSeatMapPage extends StatefulWidget {
   final String excursionId;
@@ -36,9 +37,14 @@ class _ExcursionSeatMapPageState extends State<ExcursionSeatMapPage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final passengerProvider = context.read<PassengerProvider>();
+    
+    // Obtém a empresa ativa do AuthProvider para o filtro Multi-tenant
+    final authProvider = context.watch<AuthProvider>();
+    final companyId = authProvider.currentUser?.company ?? '';
 
     return StreamBuilder<List<Passenger>>(
-      stream: passengerProvider.watchPassengers(widget.excursionId),
+      // CORREÇÃO: Passando companyId para o watchPassengers
+      stream: passengerProvider.watchPassengers(widget.excursionId, companyId),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(
@@ -482,6 +488,10 @@ class _PassengerPickerSheetState extends State<_PassengerPickerSheet> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final provider = context.read<PassengerProvider>();
+    
+    // CORREÇÃO: Obtendo o companyId para carregar a stream do CRM
+    final authProvider = context.watch<AuthProvider>();
+    final companyId = authProvider.currentUser?.company ?? '';
 
     return Container(
       constraints: BoxConstraints(
@@ -517,67 +527,70 @@ class _PassengerPickerSheetState extends State<_PassengerPickerSheet> {
             ),
           ),
           Expanded(
-            child: StreamBuilder<List<Passenger>>(
-              stream: provider.globalPassengersStream,
-              builder: (context, snapshot) {
-                if (!snapshot.hasData) {
-                  return const Center(child: CircularProgressIndicator());
-                }
+            child: companyId.isEmpty 
+              ? const Center(child: Text("Empresa não identificada."))
+              : StreamBuilder<List<Passenger>>(
+                  // CORREÇÃO: Mudado de getter para método com companyId
+                  stream: provider.getGlobalPassengersStream(companyId),
+                  builder: (context, snapshot) {
+                    if (!snapshot.hasData) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
 
-                final filtered = snapshot.data!.where((pGlobal) {
-                  final exP = widget.passengersInExcursion
-                      .where((pEx) => pEx.id == pGlobal.id)
-                      .firstOrNull;
-                  
-                  final matchesSearch = pGlobal.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-                      pGlobal.document.contains(_searchQuery);
-                  
-                  return (exP == null || exP.seatNumber.isEmpty) && matchesSearch;
-                }).toList();
+                    final filtered = snapshot.data!.where((pGlobal) {
+                      final exP = widget.passengersInExcursion
+                          .where((pEx) => pEx.id == pGlobal.id)
+                          .firstOrNull;
+                      
+                      final matchesSearch = pGlobal.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+                          pGlobal.document.contains(_searchQuery);
+                      
+                      return (exP == null || exP.seatNumber.isEmpty) && matchesSearch;
+                    }).toList();
 
-                if (filtered.isEmpty) {
-                  return Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(32.0),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.search_off, size: 48, color: Colors.white12),
-                          const SizedBox(height: 16),
-                          Text(
-                            _searchQuery.isEmpty 
-                                ? "Nenhum passageiro disponível para vínculo." 
-                                : "Nenhum passageiro encontrado para '$_searchQuery'",
-                            textAlign: TextAlign.center,
-                            style: theme.textTheme.bodyMedium?.copyWith(color: Colors.white38),
+                    if (filtered.isEmpty) {
+                      return Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(32.0),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.search_off, size: 48, color: Colors.white12),
+                              const SizedBox(height: 16),
+                              Text(
+                                _searchQuery.isEmpty 
+                                    ? "Nenhum passageiro disponível para vínculo." 
+                                    : "Nenhum passageiro encontrado para '$_searchQuery'",
+                                textAlign: TextAlign.center,
+                                style: theme.textTheme.bodyMedium?.copyWith(color: Colors.white38),
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
-                    ),
-                  );
-                }
+                        ),
+                      );
+                    }
 
-                return ListView.separated(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  itemCount: filtered.length,
-                  separatorBuilder: (_, __) => const Divider(color: Colors.white10, height: 1),
-                  itemBuilder: (context, index) {
-                    final p = filtered[index];
-                    return ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor: Colors.white.withValues(alpha: 0.05),
-                        child: const Icon(Icons.person, color: Colors.white54),
-                      ),
-                      title: Text(p.name),
-                      subtitle: Text(
-                        p.document.isEmpty ? "Sem documento" : p.document,
-                      ),
-                      onTap: () => _handleLink(context, provider, p),
+                    return ListView.separated(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      itemCount: filtered.length,
+                      separatorBuilder: (_, __) => const Divider(color: Colors.white10, height: 1),
+                      itemBuilder: (context, index) {
+                        final p = filtered[index];
+                        return ListTile(
+                          leading: CircleAvatar(
+                            backgroundColor: Colors.white.withValues(alpha: 0.05),
+                            child: const Icon(Icons.person, color: Colors.white54),
+                          ),
+                          title: Text(p.name),
+                          subtitle: Text(
+                            p.document.isEmpty ? "Sem documento" : p.document,
+                          ),
+                          onTap: () => _handleLink(context, provider, p),
+                        );
+                      },
                     );
                   },
-                );
-              },
-            ),
+                ),
           ),
           const SizedBox(height: 20),
         ],

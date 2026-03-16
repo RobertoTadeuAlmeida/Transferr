@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:transferr/config/theme/app_theme.dart';
 import '../../providers/excursion_provider.dart';
 import '../../providers/passenger_provider.dart';
+import '../../providers/auth_provider.dart';
 import '../../models/excursion.dart';
 import '../../models/enums.dart';
 import '../../models/passenger.dart';
@@ -22,6 +23,10 @@ class ExcursionDashboardPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final excursionProvider = context.watch<ExcursionProvider>();
     final passengerProvider = context.read<PassengerProvider>();
+    
+    // OBTENÇÃO DA EMPRESA ATIVA PARA MULTI-TENANT
+    final authProvider = context.watch<AuthProvider>();
+    final companyId = authProvider.currentUser?.company ?? '';
 
     final excursion = excursionProvider.excursions
         .cast<Excursion?>()
@@ -51,7 +56,8 @@ class ExcursionDashboardPage extends StatelessWidget {
           final double totalExpenses = expenses.fold(0, (sum, item) => sum + item.value);
 
           return StreamBuilder<List<Passenger>>(
-            stream: passengerProvider.watchPassengers(excursionId),
+            // CORREÇÃO: Adicionado companyId na chamada do stream
+            stream: passengerProvider.watchPassengers(excursionId, companyId),
             builder: (context, passengerSnapshot) {
               final passengers = passengerSnapshot.data ?? [];
               final double faturamentoReal = passengers.fold(

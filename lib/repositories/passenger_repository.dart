@@ -1,6 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart'; // Para kDebugMode
+import 'package:flutter/foundation.dart';
 import '../models/passenger.dart';
 
 class PassengerRepository {
@@ -23,10 +23,12 @@ class PassengerRepository {
   // 1. GESTÃO DE CADASTRO (CRM - BASE MESTRE)
   // ===========================================================================
 
+  /// Salva ou atualiza um passageiro no CRM Global vinculado à empresa.
   Future<String> savePassenger(Passenger passenger) async {
     try {
-      final uid = _currentUserId;
-      if (uid.isEmpty) throw Exception("Usuário não autenticado.");
+      if (passenger.empresa.isEmpty) {
+        throw Exception("Obrigatório informar a empresa para salvar o passageiro.");
+      }
 
       final docRef = passenger.id.isEmpty
           ? _collection.doc()
@@ -34,16 +36,15 @@ class PassengerRepository {
 
       final data = passenger.toMap();
       data['id'] = docRef.id;
-      data['userId'] = uid; // Garante o vínculo com o dono
+      data['criadoPor'] = _currentUserId; // Rastreabilidade: quem criou o registro
       data['lastUpdate'] = FieldValue.serverTimestamp();
 
       if (passenger.id.isEmpty) {
         data['createdAt'] = FieldValue.serverTimestamp();
         data['totalViagens'] = 0;
-        data['excursaoId'] = null;
       }
 
-      debugPrint("💾 REPOSITORY: Salvando passageiro ${docRef.id} para o usuário $uid");
+      debugPrint("💾 REPOSITORY: Salvando passageiro ${docRef.id} para a empresa ${passenger.empresa}");
       await docRef.set(data, SetOptions(merge: true));
       return docRef.id;
     } catch (e) {
@@ -52,31 +53,30 @@ class PassengerRepository {
     }
   }
 
-  Stream<List<Passenger>> getGlobalPassengersStream() {
-    final uid = _currentUserId;
-
-    if (uid.isEmpty) {
-      debugPrint("🛑 REPOSITORY: Stream abortada. UserID vazio.");
+  /// Escuta os passageiros globais filtrados pela EMPRESA ativa.
+  Stream<List<Passenger>> getGlobalPassengersStream(String companyId) {
+    if (companyId.isEmpty) {
+      debugPrint("🛑 REPOSITORY: Stream abortada. CompanyID vazio.");
       return Stream.value([]);
     }
 
-    debugPrint("📡 REPOSITORY: Iniciando Stream para o usuário: $uid");
+    debugPrint("📡 REPOSITORY: Iniciando Stream de CRM para a empresa: $companyId");
 
     return _collection
-        .where('userId', isEqualTo: uid)
+        .where('empresa', isEqualTo: companyId) // Filtro Multi-tenant
         .orderBy('nome')
         .snapshots()
         .map((snapshot) {
-      debugPrint("✅ REPOSITORY: Snapshot recebido com ${snapshot.docs.length} documentos.");
+      debugPrint("✅ REPOSITORY: CRM Snapshot recebido com ${snapshot.docs.length} documentos.");
 
       return snapshot.docs.map((doc) {
         try {
           return Passenger.fromMap(doc.id, doc.data());
         } catch (e) {
           debugPrint("❌ REPOSITORY ERROR (fromMap): Erro no documento ${doc.id}: $e");
-          // Retorna um passageiro "dummy" para não quebrar a lista inteira por causa de um erro
           return Passenger(
               id: doc.id,
+              empresa: companyId,
               name: "Erro de Dados (${doc.id})",
               document: "",
               phone: "",
@@ -85,21 +85,21 @@ class PassengerRepository {
         }
       }).toList();
     })
-        .handleError((error) {
+    .handleError((error) {
       debugPrint("🔥 REPOSITORY STREAM CRITICAL ERROR: $error");
-      // Se o erro for de índice, ele aparecerá aqui com o link para criar.
       return <Passenger>[];
     });
   }
 
-  Future<Passenger?> getPassengerById(String passengerId) async {
+  /// Busca um passageiro por ID, validando se ele pertence à empresa ativa.
+  Future<Passenger?> getPassengerById(String passengerId, String companyId) async {
     try {
       final doc = await _collection.doc(passengerId).get();
       if (!doc.exists) return null;
 
       final data = doc.data();
-      if (data?['userId'] != _currentUserId) {
-        debugPrint("🚫 REPOSITORY: Tentativa de acesso negada a passageiro de outro usuário.");
+      if (data?['empresa'] != companyId) {
+        debugPrint("🚫 REPOSITORY: Tentativa de acesso negada a passageiro de outra empresa.");
         return null;
       }
 

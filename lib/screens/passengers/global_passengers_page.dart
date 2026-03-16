@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../models/passenger.dart';
+import '../../providers/auth_provider.dart'; // Import necessário
 import '../../providers/excursion_provider.dart';
 import '../../providers/passenger_provider.dart';
 import '../../widgets/app_drawer.dart';
@@ -46,6 +47,10 @@ class _GlobalPassengersPageState extends State<GlobalPassengersPage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isSelectionMode = widget.excursionId != null;
+    
+    // OBTENÇÃO DA EMPRESA ATIVA PARA O MULTI-TENANT
+    final authProvider = context.watch<AuthProvider>();
+    final companyId = authProvider.currentUser?.company ?? '';
 
     return Scaffold(
       appBar: AppBar(
@@ -65,61 +70,60 @@ class _GlobalPassengersPageState extends State<GlobalPassengersPage> {
         children: [
           _buildSearchBar(theme),
           Expanded(
-            child: StreamBuilder<List<Passenger>>(
-              // CORREÇÃO: Usamos o stream que aponta para a coleção 'passageiros'
-              stream: context.read<PassengerProvider>().globalPassengersStream,
-              builder: (context, snapshot) {
-                // CORREÇÃO DO CRASH: Removido o uso do '!' em dados nulos
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
+            child: companyId.isEmpty 
+              ? const Center(child: Text("Nenhuma empresa ativa selecionada."))
+              : StreamBuilder<List<Passenger>>(
+                  stream: context.read<PassengerProvider>().getGlobalPassengersStream(companyId),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
 
-                if (snapshot.hasError) {
-                  return _buildErrorState(theme, snapshot.error.toString());
-                }
+                    if (snapshot.hasError) {
+                      return _buildErrorState(theme, snapshot.error.toString());
+                    }
 
-                final allPassengers = snapshot.data ?? [];
+                    final allPassengers = snapshot.data ?? [];
 
-                if (allPassengers.isEmpty) {
-                  return _buildEmptyState(theme);
-                }
+                    if (allPassengers.isEmpty) {
+                      return _buildEmptyState(theme);
+                    }
 
-                // Filtro em memória
-                final filtered = allPassengers.where((p) {
-                  final search = _normalize(_searchQuery);
-                  final nameMatch = _normalize(p.name).contains(search);
-                  final docMatch = p.document.contains(_searchQuery);
-                  return nameMatch || docMatch;
-                }).toList();
+                    final filtered = allPassengers.where((p) {
+                      final search = _normalize(_searchQuery);
+                      final nameMatch = _normalize(p.name).contains(search);
+                      final docMatch = p.document.contains(_searchQuery);
+                      return nameMatch || docMatch;
+                    }).toList();
 
-                if (filtered.isEmpty && _searchQuery.isNotEmpty) {
-                  return _buildEmptyState(theme);
-                }
+                    if (filtered.isEmpty && _searchQuery.isNotEmpty) {
+                      return _buildEmptyState(theme);
+                    }
 
-                return ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: filtered.length,
-                  itemBuilder: (context, index) {
-                    final passenger = filtered[index];
+                    return ListView.builder(
+                      padding: const EdgeInsets.all(16),
+                      itemCount: filtered.length,
+                      itemBuilder: (context, index) {
+                        final passenger = filtered[index];
 
-                    return PassengerCrmCard(
-                      passenger: passenger,
-                      onTap: () {
-                        if (isSelectionMode) {
-                          _showConfirmationDialog(context, passenger);
-                        } else {
-                          Navigator.pushNamed(
-                            context,
-                            '/passenger-details',
-                            arguments: {'passenger': passenger},
-                          );
-                        }
+                        return PassengerCrmCard(
+                          passenger: passenger,
+                          onTap: () {
+                            if (isSelectionMode) {
+                              _showConfirmationDialog(context, passenger);
+                            } else {
+                              Navigator.pushNamed(
+                                context,
+                                '/passenger-details',
+                                arguments: {'passenger': passenger},
+                              );
+                            }
+                          },
+                        );
                       },
                     );
                   },
-                );
-              },
-            ),
+                ),
           ),
         ],
       ),
@@ -157,6 +161,7 @@ class _GlobalPassengersPageState extends State<GlobalPassengersPage> {
                   final excursion = excursionProvider.excursions.firstWhere(
                     (e) => e.id == widget.excursionId,
                   );
+                  
                   final success = await passengerProvider.linkExistingPassenger(
                     context: context,
                     passengerId: passenger.id,
@@ -191,12 +196,15 @@ class _GlobalPassengersPageState extends State<GlobalPassengersPage> {
                         arguments: {
                           'passenger': updatedPassenger,
                           'excursionId': widget.excursionId,
+                          'excursionPrice': excursion.basePrice, // Importante passar o preço aqui também
                         },
                       );
                     }
                   }
                 } catch (e) {
-                  if (mounted) Navigator.of(dialogContext).pop();
+                  if (mounted) {
+                    Navigator.of(dialogContext).pop();
+                  }
                   messenger.showSnackBar(
                     SnackBar(
                       content: Text("Erro ao vincular: $e"),
@@ -219,7 +227,7 @@ class _GlobalPassengersPageState extends State<GlobalPassengersPage> {
         color: theme.scaffoldBackgroundColor,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
+            color: Colors.black.withValues(alpha:0.05),
             blurRadius: 4,
             offset: const Offset(0, 2),
           ),

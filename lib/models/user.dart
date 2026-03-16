@@ -2,7 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 class User {
   final String id;
-  final String company; // ID da Empresa (Map to 'empresa')
+  final String company; // ID da Empresa (Map to 'empresa' ou 'company')
   final String companyName; // Nome Fantasia (Map to 'nomeEmpresa')
   final List<String> companies; // IDs de todas as empresas vinculadas
   final String name; 
@@ -77,35 +77,43 @@ class User {
   }
 
   factory User.fromMap(String id, Map<String, dynamic> map) {
+    // FLEXIBILIDADE: Tenta ler 'empresa' ou 'company' ou o próprio 'id' (para admins antigos)
+    final String activeCompany = map['empresa'] ?? map['company'] ?? id;
+
     List<String> companiesList = [];
     if (map['empresas'] != null) {
       companiesList = List<String>.from(map['empresas']);
-    } else if (map['empresa'] != null) {
-      companiesList = [map['empresa']];
+    } else if (map['companies'] != null) {
+      companiesList = List<String>.from(map['companies']);
+    }
+    
+    // Se a lista estiver vazia, garante que a empresa ativa esteja nela
+    if (companiesList.isEmpty) {
+      companiesList = [activeCompany];
     }
 
     return User(
       id: id,
-      company: map['empresa'] ?? '',
-      companyName: map['nomeEmpresa'] ?? '',
+      company: activeCompany,
+      companyName: map['nomeEmpresa'] ?? map['companyName'] ?? '',
       companies: companiesList,
-      name: map['nome'] ?? '',
+      name: map['nome'] ?? map['name'] ?? '',
       email: map['email'] ?? '',
-      phone: map['telefone'] ?? '',
-      document: map['documento'] ?? '',
+      phone: map['telefone'] ?? map['phone'] ?? '',
+      document: map['documento'] ?? map['document'] ?? '',
       password: '',
-      birthDate: (map['dataNascimento'] as Timestamp? ?? Timestamp.now()).toDate(),
-      profile: map['perfil'] ?? 'AGENTE',
+      birthDate: (map['dataNascimento'] as Timestamp? ?? map['birthDate'] as Timestamp? ?? Timestamp.now()).toDate(),
+      profile: map['perfil'] ?? map['profile'] ?? 'AGENTE',
       isActive: map['isActive'] ?? true,
-      zipCode: map['cep'] ?? '',
-      address: map['endereco'] ?? '',
-      number: map['numero'] ?? '',
-      neighborhood: map['bairro'] ?? '',
-      city: map['cidade'] ?? '',
-      state: map['estado'] ?? '',
-      createdAt: (map['criadoEm'] as Timestamp? ?? Timestamp.now()).toDate(),
-      updatedAt: (map['atualizadoEm'] as Timestamp?)?.toDate(),
-      deletedAt: (map['deletadoEm'] as Timestamp?)?.toDate(),
+      zipCode: map['cep'] ?? map['zipCode'] ?? '',
+      address: map['endereco'] ?? map['address'] ?? '',
+      number: map['numero'] ?? map['number'] ?? '',
+      neighborhood: map['bairro'] ?? map['neighborhood'] ?? '',
+      city: map['cidade'] ?? map['city'] ?? '',
+      state: map['estado'] ?? map['state'] ?? '',
+      createdAt: (map['criadoEm'] as Timestamp? ?? map['createdAt'] as Timestamp? ?? Timestamp.now()).toDate(),
+      updatedAt: (map['atualizadoEm'] as Timestamp? ?? map['updatedAt'] as Timestamp?)?.toDate(),
+      deletedAt: (map['deletadoEm'] as Timestamp? ?? map['deletedAt'] as Timestamp?)?.toDate(),
     );
   }
 

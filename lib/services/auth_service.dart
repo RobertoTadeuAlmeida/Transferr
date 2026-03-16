@@ -13,6 +13,9 @@ class AuthService {
   Future<User?> getUserData(String uid) => _userRepo.getUserData(uid);
   Future<void> logout() => _userRepo.signOut();
 
+  /// Salva ou atualiza os dados completos do usuário no Firestore
+  Future<void> saveUserData(User user) => _userRepo.saveUserData(user);
+
   Future<void> sendPasswordReset(String email) async {
     try {
       await fb_auth.FirebaseAuth.instance.sendPasswordResetEmail(email: email.trim());

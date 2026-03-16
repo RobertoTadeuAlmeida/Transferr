@@ -4,6 +4,7 @@ import '../../models/passenger.dart';
 import '../../models/enums.dart';
 import '../../providers/passenger_provider.dart';
 import '../../providers/excursion_provider.dart';
+import '../../providers/auth_provider.dart';
 import '../../config/theme/app_theme.dart';
 
 class CheckInPage extends StatefulWidget {
@@ -39,6 +40,10 @@ class _CheckInPageState extends State<CheckInPage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final passengerProvider = context.read<PassengerProvider>();
+    
+    // OBTENÇÃO DA EMPRESA ATIVA PARA O MULTI-TENANT
+    final authProvider = context.watch<AuthProvider>();
+    final companyId = authProvider.currentUser?.company ?? '';
 
     return Scaffold(
       appBar: AppBar(
@@ -54,7 +59,8 @@ class _CheckInPageState extends State<CheckInPage> {
         ),
       ),
       body: StreamBuilder<List<Passenger>>(
-        stream: passengerProvider.watchPassengers(widget.excursionId),
+        // CORREÇÃO: Adicionado o companyId na chamada do stream
+        stream: passengerProvider.watchPassengers(widget.excursionId, companyId),
         builder: (context, snapshot) {
           final passengers = snapshot.data ?? [];
 
@@ -291,16 +297,11 @@ class _CheckInPageState extends State<CheckInPage> {
   }
 
   void _updateStatus(Passenger passenger, BoardingStatus status) {
-    String local = 'Em trânsito';
-    if (widget.isStarting) local = 'Local de Partida';
-    if (widget.isFinishing) local = 'Destino Final / Retorno';
-    if (_localController.text.isNotEmpty) local = _localController.text;
-
+    // CORREÇÃO: Removido o parâmetro localAtual que não existe mais no Provider
     context.read<PassengerProvider>().updateOperationalData(
       context: context,
       passengerId: passenger.id,
       status: status,
-      localAtual: local,
       excursionId: widget.excursionId,
     );
   }

@@ -14,6 +14,7 @@ import 'package:transferr/screens/login/auth_wrapper.dart';
 import 'package:transferr/screens/register/registration_page.dart';
 import 'package:transferr/screens/home_page.dart';
 import 'package:transferr/screens/settings/settings_page.dart';
+import 'package:transferr/screens/settings/my_company_page.dart';
 
 // Screens - Excursões
 import 'package:transferr/screens/excursions/excursions_page.dart';
@@ -74,6 +75,10 @@ class MyApp extends StatelessWidget {
         '/add-excursion': (context) => const AddExcursionPage(),
         '/history': (context) => const HistoryPage(),
 
+        // Configurações e Empresa
+        '/my-company': (context) => const MyCompanyPage(),
+        '/settings': (context) => const SettingsPage(),
+
         // Gestão de Equipe
         '/users': (context) => const UsersListPage(),
         '/add-user': (context) => const AddUserPage(),
@@ -115,7 +120,10 @@ class MyApp extends StatelessWidget {
         '/global-passengers': (context) {
           final args = ModalRoute.of(context)?.settings.arguments;
           if (args is Map<String, dynamic>) {
-            return GlobalPassengersPage(excursionId: args['excursionId']);
+            return GlobalPassengersPage(
+              excursionId: args['excursionId'],
+              excursionPrice: args['excursionPrice'],
+            );
           }
           return const GlobalPassengersPage();
         },
@@ -163,7 +171,6 @@ class MyApp extends StatelessWidget {
         },
 
         '/finance': (context) => const FinancePage(),
-        '/settings': (context) => const SettingsPage(),
       },
 
       onUnknownRoute: (settings) =>

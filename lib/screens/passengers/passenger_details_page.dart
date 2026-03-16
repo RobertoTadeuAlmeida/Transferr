@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import 'package:transferr/providers/passenger_provider.dart';
-import 'package:transferr/providers/excursion_provider.dart';
 import '../../models/passenger.dart';
 import '../../models/excursion.dart';
-import '../excursions/widgets/excursion_card.dart';
+import '../../providers/passenger_provider.dart';
+import '../../providers/excursion_provider.dart';
+import '../../providers/auth_provider.dart';
 import '../../config/theme/app_theme.dart';
+import '../excursions/widgets/excursion_card.dart';
 import 'add_passenger_page.dart';
 
 class PassengerDetailsPage extends StatelessWidget {
@@ -25,23 +26,32 @@ class PassengerDetailsPage extends StatelessWidget {
       locale: 'pt_BR',
       symbol: 'R\$',
     );
+    
     final bool isInExcursion = excursionId != null && excursionId!.isNotEmpty;
+    
+    // OBTENÇÃO DA EMPRESA ATIVA
+    final authProvider = context.watch<AuthProvider>();
+    final companyId = authProvider.currentUser?.company ?? "";
 
     return StreamBuilder<List<Passenger>>(
+      // CORREÇÃO: Passando excursionId e companyId para o stream
       stream: isInExcursion
-          ? context.read<PassengerProvider>().watchPassengers(excursionId!)
-          : context.read<PassengerProvider>().globalPassengersStream,
+          ? context.read<PassengerProvider>().watchPassengers(excursionId!, companyId)
+          : context.read<PassengerProvider>().getGlobalPassengersStream(companyId),
       builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return const Center(child: Text("Erro ao carregar dados"));
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Scaffold(body: Center(child: CircularProgressIndicator()));
         }
 
-        final currentPassenger =
-            snapshot.data?.firstWhere(
+        if (snapshot.hasError) {
+          return const Scaffold(body: Center(child: Text("Erro ao carregar dados")));
+        }
+
+        // Busca o passageiro atualizado no stream ou usa o inicial como fallback
+        final currentPassenger = snapshot.data?.firstWhere(
               (p) => p.id == passenger.id,
               orElse: () => passenger,
-            ) ??
-            passenger;
+            ) ?? passenger;
 
         return Scaffold(
           appBar: AppBar(
@@ -49,15 +59,28 @@ class PassengerDetailsPage extends StatelessWidget {
             actions: [
               IconButton(
                 icon: const Icon(Icons.edit_outlined),
-                onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => AddPassengerPage(
-                      excursionId: excursionId ?? '',
-                      passenger: currentPassenger,
+                onPressed: () {
+                  // Busca o preço atual da excursão para passar para a tela de edição
+                  double? currentExcursionPrice;
+                  if (isInExcursion) {
+                    try {
+                      currentExcursionPrice = context.read<ExcursionProvider>().excursions.firstWhere(
+                        (e) => e.id == excursionId
+                      ).basePrice;
+                    } catch (_) {}
+                  }
+
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => AddPassengerPage(
+                        excursionId: excursionId ?? '',
+                        excursionPrice: currentExcursionPrice,
+                        passenger: currentPassenger,
+                      ),
                     ),
-                  ),
-                ),
+                  );
+                },
               ),
             ],
           ),
@@ -85,8 +108,7 @@ class PassengerDetailsPage extends StatelessWidget {
                   isInExcursion: isInExcursion,
                 ),
 
-                if (currentPassenger.isMinor &&
-                    currentPassenger.guardian != null) ...[
+                if (currentPassenger.isMinor && currentPassenger.guardian != null) ...[
                   const SizedBox(height: 24),
                   _buildSectionHeader(
                     context,
@@ -115,12 +137,7 @@ class PassengerDetailsPage extends StatelessWidget {
     );
   }
 
-  Widget _buildSectionHeader(
-    BuildContext context,
-    IconData icon,
-    String title, {
-    Color? color,
-  }) {
+  Widget _buildSectionHeader(BuildContext context, IconData icon, String title, {Color? color}) {
     final primary = color ?? Theme.of(context).primaryColor;
     return Padding(
       padding: const EdgeInsets.only(left: 4, bottom: 12),
@@ -156,23 +173,20 @@ class _FinancialCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Busca a excursão para ter o preço base caso o saleValue não exista
     final excursion = context.watch<ExcursionProvider>().excursions.firstWhere(
       (e) => e.id == excursionId,
       orElse: () => Excursion(
-        id: '',
-        name: '',
-        idMainDestination: '',
-        startDate: DateTime.now(),
-        returnDate: DateTime.now(),
-        basePrice: 0,
-        totalSeats: 0,
-        slug: '',
-        idResponsible: '', empresa: '',
+        id: '', name: '', idMainDestination: '', 
+        startDate: DateTime.now(), returnDate: DateTime.now(), 
+        basePrice: 0, totalSeats: 0, slug: '', idResponsible: '', empresa: '',
       ),
     );
 
-    final double valorFaltante = excursion.basePrice - passenger.depositValue;
-    final bool isTotalPaid = valorFaltante <= 0;
+    // ESCALABILIDADE: Usa o preço congelado na venda (saleValue) ou o preço base atual
+    final double precoAcordado = passenger.saleValue > 0 ? passenger.saleValue : excursion.basePrice;
+    final double valorFaltante = precoAcordado - passenger.depositValue;
+    final bool isTotalPaid = passenger.isPaid || valorFaltante <= 0;
 
     return Card(
       color: isTotalPaid ? AppTheme.successColor.withValues(alpha: 0.1) : null,
@@ -194,24 +208,18 @@ class _FinancialCard extends StatelessWidget {
                   style: TextStyle(fontWeight: FontWeight.bold),
                 ),
                 if (isTotalPaid)
-                  const Icon(
-                    Icons.check_circle,
-                    color: AppTheme.successColor,
-                    size: 20,
-                  ),
+                  const Icon(Icons.check_circle, color: AppTheme.successColor, size: 20),
               ],
             ),
             const Divider(height: 24),
             _DetailRow(
-              'Valor da Excursão:',
-              formatter.format(excursion.basePrice),
+              'Valor Contratado:',
+              formatter.format(precoAcordado),
             ),
             _DetailRow(
               'Total Pago:',
               formatter.format(passenger.depositValue),
-              valueColor: isTotalPaid
-                  ? AppTheme.successColor
-                  : AppTheme.primaryColor,
+              valueColor: isTotalPaid ? AppTheme.successColor : AppTheme.primaryColor,
             ),
 
             const SizedBox(height: 12),
@@ -221,7 +229,7 @@ class _FinancialCard extends StatelessWidget {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
-                  onPressed: () => _handlePayment(context, excursion.basePrice),
+                  onPressed: () => _handlePayment(context, precoAcordado),
                   icon: const Icon(Icons.payments_outlined),
                   label: const Text("DAR BAIXA TOTAL"),
                   style: ElevatedButton.styleFrom(
@@ -257,10 +265,7 @@ class _FinancialCard extends StatelessWidget {
               label: const Text("DESVINCULAR DA EXCURSÃO"),
               style: TextButton.styleFrom(
                 foregroundColor: AppTheme.errorColor,
-                textStyle: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                ),
+                textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
               ),
             ),
           ],
@@ -283,31 +288,15 @@ class _FinancialCard extends StatelessWidget {
             child: const Text("CANCELAR"),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.orangeAccent,
-            ),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orangeAccent),
             onPressed: () async {
               Navigator.pop(dialogContext);
-
               await context.read<PassengerProvider>().unlinkPassenger(
                 context: context,
                 passengerId: passenger.id,
                 excursionId: excursionId,
               );
-
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      "${passenger.name} foi removido desta excursão.",
-                    ),
-                    backgroundColor: Colors.orangeAccent,
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
-
-                Navigator.pop(context);
-              }
+              if (context.mounted) Navigator.pop(context);
             },
             child: const Text("CONFIRMAR"),
           ),
@@ -322,7 +311,7 @@ class _FinancialCard extends StatelessWidget {
       builder: (dialogContext) => AlertDialog(
         title: const Text("Confirmar Baixa Total?"),
         content: Text(
-          "Deseja registrar que ${passenger.name} quitou o valor total de ${formatter.format(fullPrice)}?",
+          "Deseja registrar que ${passenger.name} quitou o valor de ${formatter.format(fullPrice)}?",
         ),
         actions: [
           TextButton(
@@ -330,37 +319,20 @@ class _FinancialCard extends StatelessWidget {
             child: const Text("CANCELAR"),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.successColor,
-            ),
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.successColor),
             onPressed: () async {
               Navigator.pop(dialogContext);
-
               try {
                 await context.read<PassengerProvider>().settleFullPayment(
-                      context: context,
-                      excursionId: excursionId,
-                      passengerId: passenger.id,
-                      fullValue: fullPrice,
-                    );
-
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text("Baixa total realizada com sucesso!"),
-                      backgroundColor: AppTheme.successColor,
-                      behavior: SnackBarBehavior.floating,
-                    ),
-                  );
-                }
+                  context: context,
+                  excursionId: excursionId,
+                  passengerId: passenger.id,
+                  fullValue: fullPrice,
+                );
               } catch (e) {
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text("Erro ao dar baixa: $e"),
-                      backgroundColor: AppTheme.errorColor,
-                      behavior: SnackBarBehavior.floating,
-                    ),
+                    SnackBar(content: Text("Erro: $e"), backgroundColor: AppTheme.errorColor),
                   );
                 }
               }
@@ -369,41 +341,6 @@ class _FinancialCard extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _PassengerHistorySection extends StatelessWidget {
-  final String passengerId;
-
-  const _PassengerHistorySection({required this.passengerId});
-
-  @override
-  Widget build(BuildContext context) {
-    final history = context.watch<ExcursionProvider>().excursions.where((
-      excursion,
-    ) {
-      return excursion.idResponsible == passengerId;
-    }).toList();
-
-    if (history.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 20),
-        child: Center(
-          child: Text(
-            'Nenhum histórico encontrado.',
-            style: TextStyle(color: Colors.grey),
-          ),
-        ),
-      );
-    }
-
-    return ListView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: history.length,
-      itemBuilder: (context, index) =>
-          ExcursionCard(excursion: history[index], actionsEnabled: false),
     );
   }
 }
@@ -427,9 +364,7 @@ class _InfoCard extends StatelessWidget {
             if (isInExcursion)
               _DetailRow(
                 'Poltrona:',
-                passenger.seatNumber.isEmpty
-                    ? 'Não definida'
-                    : passenger.seatNumber,
+                passenger.seatNumber.isEmpty ? 'Não definida' : passenger.seatNumber,
               ),
             _DetailRow('Idade:', '${passenger.age} anos'),
           ],
@@ -441,7 +376,6 @@ class _InfoCard extends StatelessWidget {
 
 class _GuardianCard extends StatelessWidget {
   final dynamic guardian;
-
   const _GuardianCard({required this.guardian});
 
   @override
@@ -492,7 +426,6 @@ class _DetailRow extends StatelessWidget {
 
 class _PendingBadge extends StatelessWidget {
   final String amount;
-
   const _PendingBadge({required this.amount});
 
   @override
@@ -506,21 +439,8 @@ class _PendingBadge extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          const Text(
-            "PENDENTE:",
-            style: TextStyle(
-              color: AppTheme.errorColor,
-              fontWeight: FontWeight.bold,
-              fontSize: 12,
-            ),
-          ),
-          Text(
-            amount,
-            style: const TextStyle(
-              color: AppTheme.errorColor,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
+          const Text("PENDENTE:", style: TextStyle(color: AppTheme.errorColor, fontWeight: FontWeight.bold, fontSize: 12)),
+          Text(amount, style: const TextStyle(color: AppTheme.errorColor, fontWeight: FontWeight.bold)),
         ],
       ),
     );
@@ -529,7 +449,6 @@ class _PendingBadge extends StatelessWidget {
 
 class _DeleteButton extends StatelessWidget {
   final Passenger passenger;
-
   const _DeleteButton({required this.passenger});
 
   @override
@@ -538,14 +457,7 @@ class _DeleteButton extends StatelessWidget {
       child: TextButton.icon(
         onPressed: () => _confirmGlobalDelete(context),
         icon: const Icon(Icons.delete_outline, color: AppTheme.errorColor),
-        label: const Text(
-          'REMOVER DO SISTEMA',
-          style: TextStyle(
-            color: AppTheme.errorColor,
-            fontSize: 12,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
+        label: const Text('REMOVER DO SISTEMA', style: TextStyle(color: AppTheme.errorColor, fontSize: 12, fontWeight: FontWeight.bold)),
       ),
     );
   }
@@ -555,29 +467,49 @@ class _DeleteButton extends StatelessWidget {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text("Excluir Permanente?"),
-        content: Text(
-          "Deseja remover ${passenger.name} da sua base de dados? Esta ação não pode ser desfeita.",
-        ),
+        content: Text("Deseja remover ${passenger.name} da sua base de dados? Esta ação não pode ser desfeita."),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("CANCELAR"),
-          ),
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("CANCELAR")),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.errorColor,
-            ),
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.errorColor),
             onPressed: () async {
               Navigator.pop(context);
-              await context.read<PassengerProvider>().deletePassenger(
-                passenger.id,
-              );
+              await context.read<PassengerProvider>().deletePassenger(passenger.id);
               if (context.mounted) Navigator.pop(context);
             },
             child: const Text("EXCLUIR TUDO"),
           ),
         ],
       ),
+    );
+  }
+}
+
+class _PassengerHistorySection extends StatelessWidget {
+  final String passengerId;
+  const _PassengerHistorySection({required this.passengerId});
+
+  @override
+  Widget build(BuildContext context) {
+    // Busca excursões onde o ID do passageiro está no histórico de viagens
+    final history = context.watch<ExcursionProvider>().excursions.where((e) {
+      // Nota: Idealmente buscaríamos no model do passageiro seu tripHistory, 
+      // mas para esta listagem usamos a base carregada de excursões como exemplo.
+      return e.idResponsible == passengerId; 
+    }).toList();
+
+    if (history.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 20),
+        child: Center(child: Text('Nenhum histórico encontrado.', style: TextStyle(color: Colors.grey))),
+      );
+    }
+
+    return ListView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: history.length,
+      itemBuilder: (context, index) => ExcursionCard(excursion: history[index], actionsEnabled: false),
     );
   }
 }

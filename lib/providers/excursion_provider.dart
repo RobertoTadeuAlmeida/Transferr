@@ -14,11 +14,12 @@ class ExcursionProvider with ChangeNotifier {
   List<Excursion> _excursions = [];
   bool _isLoading = false;
   StreamSubscription? _excursionSubscription;
-  String? _currentCompanyId; // Alterado de currentUserId para currentCompanyId
+  String? _currentCompanyId;
 
   // --- GETTERS PÚBLICOS ---
   List<Excursion> get allExcursions => _excursions;
   bool get isLoading => _isLoading;
+  String? get currentCompanyId => _currentCompanyId;
 
   List<Excursion> get excursions => _excursions.where((e) => !e.isDeleted).toList();
 
@@ -51,18 +52,21 @@ class ExcursionProvider with ChangeNotifier {
 
     if (_currentCompanyId == companyId && _excursionSubscription != null) return;
 
+    debugPrint("📡 EXCURSION_PROVIDER: Iniciando escuta para a empresa: $companyId");
+    
     _currentCompanyId = companyId;
     _setLoading(true);
     _excursionSubscription?.cancel();
 
-    // Chamada alterada para usar companyId
     _excursionSubscription = _service.watchExcursions(companyId: companyId).listen(
       (data) {
         _excursions = data;
         _isLoading = false;
         notifyListeners();
+        debugPrint("✅ EXCURSION_PROVIDER: ${_excursions.length} excursões carregadas.");
       },
       onError: (error) {
+        debugPrint("❌ EXCURSION_PROVIDER_ERROR: $error");
         _setLoading(false);
       },
     );
@@ -112,13 +116,26 @@ class ExcursionProvider with ChangeNotifier {
   // OPERAÇÕES DE EXCURSÃO (CRUD)
   // =========================================================================
 
-  Future<void> addExcursion(Excursion excursion) async {
+  Future<void> addExcursion(Excursion excursion, String companyId) async {
     _setLoading(true);
     try {
-      // Importante: Ao criar, vinculamos à empresa atual
-      final newExcursion = excursion.copyWith(empresa: _currentCompanyId); 
+      // Prioridade 1: ID passado por parâmetro (mais seguro)
+      // Prioridade 2: ID que já está no objeto
+      // Prioridade 3: ID interno do provider
+      final String finalCompany = companyId.isNotEmpty 
+          ? companyId 
+          : (excursion.empresa.isNotEmpty ? excursion.empresa : (_currentCompanyId ?? ''));
+
+      if (finalCompany.isEmpty) {
+        throw Exception("Não foi possível identificar a empresa ativa para salvar a excursão.");
+      }
+
+      final newExcursion = excursion.copyWith(empresa: finalCompany); 
       await _service.createExcursion(newExcursion);
+      
+      debugPrint("💾 EXCURSION_PROVIDER: Excursão salva com sucesso para a empresa $finalCompany");
     } catch (e) {
+      debugPrint("❌ EXCURSION_PROVIDER (addExcursion): $e");
       rethrow;
     } finally {
       _setLoading(false);

@@ -5,6 +5,7 @@ import 'package:uuid/uuid.dart';
 import '../../models/passenger.dart';
 import '../../models/enums.dart';
 import '../../providers/passenger_provider.dart';
+import '../../providers/auth_provider.dart';
 import '../../config/theme/app_theme.dart';
 import 'package:currency_text_input_formatter/currency_text_input_formatter.dart';
 
@@ -96,23 +97,19 @@ class _AddPassengerPageState extends State<AddPassengerPage> {
     setState(() => _isMinor = age < 18);
   }
 
-  /// Corrige o valor automaticamente se ultrapassar o preço da excursão
   void _onDepositChanged(String value) {
     if (widget.excursionPrice == null) return;
 
     final double currentVal = _currencyFormatter.getUnformattedValue().toDouble();
     
     if (currentVal > widget.excursionPrice!) {
-      // Se maior, trava no valor máximo
       final String formattedMax = _currencyFormatter.formatDouble(widget.excursionPrice!);
       
-      // Atualiza o controller e posiciona o cursor no final
       _depositController.value = TextEditingValue(
         text: formattedMax,
         selection: TextSelection.collapsed(offset: formattedMax.length),
       );
 
-      // Feedback visual rápido
       ScaffoldMessenger.of(context).clearSnackBars();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -125,8 +122,18 @@ class _AddPassengerPageState extends State<AddPassengerPage> {
   }
 
   Future<void> _submitForm() async {
-    // Validação mínima: apenas campos vazios obrigatórios
     if (!_formKey.currentState!.validate()) return;
+
+    // Obtém a empresa ativa do AuthProvider para garantir o multi-tenant
+    final authProvider = context.read<AuthProvider>();
+    final String? activeCompany = authProvider.currentUser?.company;
+
+    if (activeCompany == null || activeCompany.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Erro: Nenhuma empresa ativa encontrada.")),
+      );
+      return;
+    }
 
     final double deposit = _currencyFormatter.getUnformattedValue().toDouble();
 
@@ -135,6 +142,7 @@ class _AddPassengerPageState extends State<AddPassengerPage> {
     try {
       final passenger = Passenger(
         id: widget.passenger?.id ?? const Uuid().v4(),
+        empresa: activeCompany, // Atribui a empresa ativa
         excursionId: widget.excursionId,
         name: _nameController.text.trim(),
         phone: _phoneController.text,
@@ -142,6 +150,7 @@ class _AddPassengerPageState extends State<AddPassengerPage> {
         birthDate: _selectedBirthDate ?? DateTime.now(),
         seatNumber: _seatController.text.toUpperCase().trim(),
         depositValue: deposit,
+        // O PassengerService cuidará de definir o saleValue com base no preço atual da excursão
         isMinor: _isMinor,
         statusEmbarque:
             widget.passenger?.statusEmbarque ?? BoardingStatus.aguardando,
@@ -181,9 +190,7 @@ class _AddPassengerPageState extends State<AddPassengerPage> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isExcursionFlow = widget.excursionId.isNotEmpty;
-
+    // ... resto do build permanece igual
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -221,7 +228,32 @@ class _AddPassengerPageState extends State<AddPassengerPage> {
                         ),
                       ),
                       const SizedBox(width: 16),
-                      Expanded(child: _buildBirthDateField(theme)),
+                      Expanded(
+                        child: InkWell(
+                          onTap: () async {
+                            final date = await showDatePicker(
+                              context: context,
+                              initialDate: _selectedBirthDate ?? DateTime(2000),
+                              firstDate: DateTime(1900),
+                              lastDate: DateTime.now(),
+                            );
+                            if (date != null) {
+                              setState(() {
+                                _selectedBirthDate = date;
+                                _calculateAge(date);
+                              });
+                            }
+                          },
+                          child: InputDecorator(
+                            decoration: const InputDecoration(labelText: 'Nascimento'),
+                            child: Text(
+                              _selectedBirthDate == null
+                                  ? 'Selecionar'
+                                  : "${_selectedBirthDate!.day}/${_selectedBirthDate!.month}/${_selectedBirthDate!.year}",
+                            ),
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 16),
@@ -236,7 +268,7 @@ class _AddPassengerPageState extends State<AddPassengerPage> {
                     validator: (v) => v!.isEmpty ? 'Obrigatório' : null,
                   ),
 
-                  if (isExcursionFlow) ...[
+                  if (widget.excursionId.isNotEmpty) ...[
                     const SizedBox(height: 32),
                     _buildSectionHeader(
                       context,
@@ -278,7 +310,7 @@ class _AddPassengerPageState extends State<AddPassengerPage> {
                             controller: _depositController,
                             inputFormatters: [_currencyFormatter],
                             keyboardType: TextInputType.number,
-                            onChanged: _onDepositChanged, // Correção automática aqui
+                            onChanged: _onDepositChanged,
                             style: const TextStyle(
                               color: AppTheme.successColor,
                               fontWeight: FontWeight.bold,
@@ -348,32 +380,6 @@ class _AddPassengerPageState extends State<AddPassengerPage> {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildBirthDateField(ThemeData theme) {
-    return InkWell(
-      onTap: () async {
-        final date = await showDatePicker(
-          context: context,
-          initialDate: _selectedBirthDate ?? DateTime(2000),
-          firstDate: DateTime(1900),
-          lastDate: DateTime.now(),
-        );
-        if (date != null) {
-          setState(() => _selectedBirthDate = date);
-          _calculateAge(date);
-        }
-      },
-      child: InputDecorator(
-        decoration: const InputDecoration(labelText: 'Nascimento'),
-        child: Text(
-          _selectedBirthDate == null
-              ? '--/--/----'
-              : "${_selectedBirthDate!.day.toString().padLeft(2, '0')}/${_selectedBirthDate!.month.toString().padLeft(2, '0')}/${_selectedBirthDate!.year}",
-          style: const TextStyle(fontSize: 14),
-        ),
       ),
     );
   }

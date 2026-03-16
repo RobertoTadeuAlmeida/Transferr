@@ -25,7 +25,13 @@ class AuthProvider with ChangeNotifier {
   void _init() {
     _authSubscription = _authService.authStateChanges.listen((fbUser) async {
       if (fbUser != null) {
-        _currentUser = await _authService.getUserData(fbUser.uid);
+        final user = await _authService.getUserData(fbUser.uid);
+        if (user != null) {
+          _currentUser = user;
+          // LOGICA DE REPARO: Se o usuário é antigo e não tem o campo 'empresa' gravado corretamente
+          // ou se os nomes de campos mudaram, forçamos um salvamento para atualizar o Firestore.
+          _checkAndRepairUserData(user);
+        }
       } else {
         _currentUser = null;
       }
@@ -33,14 +39,26 @@ class AuthProvider with ChangeNotifier {
     });
   }
 
-  /// Troca a empresa ativa do usuário e notifica o sistema
+  /// Verifica se os dados no banco estão atualizados com o novo padrão (Multi-tenant)
+  Future<void> _checkAndRepairUserData(User user) async {
+    // Se o usuário logou e o objeto carregado via fromMap (que já tem fallback)
+    // detectou que os dados originais estavam em campos antigos, salvamos no novo padrão.
+    try {
+      // Simplesmente salvamos o objeto atual de volta. 
+      // O User.toMap() usará 'empresa', 'nome', etc., migrando os dados automaticamente.
+      await _authService.saveUserData(user);
+      debugPrint("🛡️ AUTH_PROVIDER: Dados do usuário sincronizados/migrados com sucesso.");
+    } catch (e) {
+      debugPrint("⚠️ AUTH_PROVIDER (Repair): Erro ao atualizar dados legados: $e");
+    }
+  }
+
   Future<void> switchCompany(String companyId) async {
     if (_currentUser == null) return;
     
     _setLoading(true);
     try {
       await _authService.switchActiveCompany(_currentUser!.id, companyId);
-      // Atualiza o objeto local para refletir a mudança imediatamente
       _currentUser = _currentUser!.copyWith(company: companyId);
       notifyListeners();
     } catch (e) {
