@@ -1,16 +1,61 @@
-# transferr
+# 🚌 Transferr
 
-A new Flutter project.
+O **Transferr** é um ecossistema completo para organizadores de excursões e viagens. O aplicativo permite a gestão de passageiros, alocação de poltronas, controle financeiro e check-in em tempo real.
 
-## Getting Started
+---
 
-This project is a starting point for a Flutter application.
+### 📖 Navegação Rápida
+[📁 Documentação Técnica (DOCS.md)](DOCS.md) | [🚀 Guia de Instalação](#-como-executar) | [🛠️ Tecnologias](#️-tecnologias)
 
-A few resources to get you started if this is your first Flutter project:
+---
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+## ✨ Funcionalidades
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+### 📋 Gestão de Excursões
+- **Dashboard:** Visão consolidada de faturamento e ocupação.
+- **Mapa de Assentos:** Interface interativa para reserva de poltronas.
+- **Financeiro:** Controle de despesas e lucros por viagem.
+
+### 👥 CRM de Passageiros
+- **Base Global:** Cadastro único de passageiros para reutilização em múltiplas viagens.
+- **Controle de Quitação:** Sistema de baixa total ou parcial de passagens.
+
+### 🚀 Operação em Tempo Real
+- **Check-in Dinâmico:** Controle de embarque sincronizado instantaneamente via Firebase Cloud.
+
+---
+
+## 🛠️ Tecnologias
+
+O projeto utiliza o estado da arte do desenvolvimento mobile:
+- **Framework:** Flutter (Android/iOS)
+- **Backend:** Firebase (Firestore & Auth)
+- **Estado:** Provider
+- **Design:** Dark Mode personalizado
+
+---
+
+## 🏗️ Arquitetura
+O Transferr adota uma variação da **Clean Architecture**, dividida em:
+`Models` ➔ `Repositories` ➔ `Services` ➔ `Providers` ➔ `UI`.
+
+Para detalhes sobre a implementação técnica, consulte o [Arquivo de Documentação](DOCS.md).
+
+---
+
+## 🚀 Como Executar
+
+### Pré-requisitos
+- Flutter SDK & Firebase CLI.
+
+### Instalação Rápida
+```bash
+git clone https://github.com/seu-usuario/transferr.git
+flutter pub get
+flutter run
+```
+
+---
+
+## 📄 Licença
+Projeto sob licença [MIT](LICENSE).

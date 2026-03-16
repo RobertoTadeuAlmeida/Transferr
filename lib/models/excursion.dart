@@ -1,161 +1,164 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:transferr/models/participant.dart';
 import 'enums.dart';
 
 class Excursion {
-  final String? id;
+  final String id;
   final String name;
-  final DateTime date;
-  final double price;
-  final int totalSeats;
-  final String location;
   final String description;
+  final String idMainDestination;
+  final DateTime startDate;
+  final DateTime returnDate;
+  final double basePrice;
+  final int totalSeats;
+  final int reservedSeats;
+  final int paidSeats;
+  final String slug;
   final ExcursionStatus status;
-  final List<Participant> participants;
-  final bool isFeatured;
-
+  final String idResponsible;
+  final String empresa; // NOVO: Vínculo Multi-tenant
+  final bool isDeleted; // Soft Delete
+  final DateTime? createdAt;
+  final DateTime? updatedAt;
 
   Excursion({
-    this.id,
+    required this.id,
     required this.name,
-    required this.date,
-    required this.price,
-    required this.totalSeats,
-    required this.location,
     this.description = '',
-    ExcursionStatus? status,
-    this.participants = const [],
-    this.isFeatured = false,
-  }): status = status ?? ExcursionStatus.scheduled;
+    required this.idMainDestination,
+    required this.startDate,
+    required this.returnDate,
+    required this.basePrice,
+    required this.totalSeats,
+    this.reservedSeats = 0,
+    this.paidSeats = 0,
+    required this.slug,
+    this.status = ExcursionStatus.programada,
+    required this.idResponsible,
+    required this.empresa, // Campo obrigatório
+    this.isDeleted = false,
+    this.createdAt,
+    this.updatedAt,
+  });
 
-  // --- GETTERS (Campos Calculados) ---
+  // ===========================================================================
+  // ----------- LÓGICA DE NEGÓCIO (CÁLCULOS LOCAIS / DDD) -----------
+  // ===========================================================================
 
-  int get totalClientsConfirmed {
-    return participants
-        .where((p) => p.status == ParticipantStatus.confirmed)
-        .length;
+  bool get isFull => reservedSeats > totalSeats;
+  double get faturamentoPrevisto => totalSeats * basePrice;
+  double get faturamentoEstimadoAtual => reservedSeats * basePrice;
+
+  double calcularCustoPorAssento(double totalDespesas) {
+    if (totalSeats <= 0) return 0.0;
+    return totalDespesas / totalSeats;
   }
 
-  int get availableSeats {
-    return totalSeats - totalClientsConfirmed;
+  double calcularLucroPrevisto(double totalDespesas) {
+    return faturamentoPrevisto - totalDespesas;
   }
 
-  double get grossRevenue {
-    return totalClientsConfirmed * price;
+  double calcularLucroAtual(double faturamentoReal, double totalDespesas) {
+    return faturamentoReal - totalDespesas;
   }
 
-  double get netRevenue {
-    // Exemplo: return grossRevenue - (custosDaExcursao ?? 0.0);
-    return grossRevenue;
-  }
-
-  int get totalPaymentsMade {
-    // Total de pagamentos confirmados
-    return participants
-        .where((p) => p.paymentStatus == PaymentStatus.paid)
-        .length;
-  }
-
-  int get pendingPayments {
-    return participants
-        .where(
-          (p) =>
-              p.status == ParticipantStatus.confirmed &&
-              p.paymentStatus == PaymentStatus.pending,
-        )
-        .length;
-  }
-
-  bool get isFull {
-    return availableSeats <= 0;
-  }
-
-  bool get hasPassed {
-    return date.isBefore(
-      DateTime.now().subtract(const Duration(days: 1)),
-    ); // Considera que passou no dia seguinte
-  }
-
-  // Método para adicionar um participante
-
-  Excursion addParticipant(Participant newParticipant) {
-    if (availableSeats > 0) {
-      final updatedParticipants = List<Participant>.from(participants)
-        ..add(newParticipant);
-      return copyWith(participants: updatedParticipants);
-    }
-    return this; // Retorna a instância original se não puder adicionar
-  }
-
-  // --- CONSTRUTORES E MÉTODOS DE CONVERSÃO ---
+  // ===========================================================================
+  // ----------- CONVERSÃO E PERSISTÊNCIA (FIRESTORE) -----------
+  // ===========================================================================
 
   Map<String, dynamic> toMap() {
     return {
-      'name': name,
-      'date': Timestamp.fromDate(date),
-      'price': price,
-      'totalSeats': totalSeats,
-      'location': location,
-      'description': description,
-      'status': status.toString().split('.').last,
-      'participants': participants.map((p) => p.toMap()).toList(),
-      'isFeatured': isFeatured,
+      'nome': name,
+      'descricao': description,
+      'idDestinoPrincipal': idMainDestination,
+      'dataPartida': Timestamp.fromDate(startDate),
+      'dataRetorno': Timestamp.fromDate(returnDate),
+      'precoBase': basePrice,
+      'assentosTotais': totalSeats,
+      'assentosReservados': reservedSeats,
+      'slug': slug,
+      'status': _statusToString(status),
+      'idResponsavel': idResponsible,
+      'empresa': empresa, // Salvando no Firestore
+      'excluido': isDeleted,
+      'criadoEm': createdAt ?? FieldValue.serverTimestamp(),
+      'atualizadoEm': FieldValue.serverTimestamp(),
     };
   }
 
-  factory Excursion.fromFirestore(DocumentSnapshot doc) {
-    Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
-
-    String statusString = data['status'] ?? 'agendada';
-
-    ExcursionStatus statusEnum = ExcursionStatus.values.firstWhere(
-      (e) => e.name == statusString,
-      orElse: () => ExcursionStatus.scheduled,
-    );
-
+  factory Excursion.fromMap(String id, Map<String, dynamic> data) {
     return Excursion(
-      id: doc.id,
-      name: data['name'] ?? '',
-      date: (data['date'] as Timestamp).toDate(),
-      price: (data['price'] as num?)?.toDouble() ?? 0.0,
-      totalSeats: data['totalSeats'] as int? ?? 0,
-      location: data['location'] ?? '',
-      description: data['description'] ?? '',
-      status: statusEnum,
-      isFeatured: data['isFeatured'] ?? false,
-
-      participants:
-          (data['participants'] as List<dynamic>?)
-              ?.map((p) => Participant.fromMap(p as Map<String, dynamic>))
-              .toList() ??
-          [],
+      id: id,
+      name: data['nome'] ?? '',
+      description: data['descricao'] ?? '',
+      idMainDestination: data['idDestinoPrincipal'] ?? '',
+      startDate: (data['dataPartida'] as Timestamp).toDate(),
+      returnDate: (data['dataRetorno'] as Timestamp).toDate(),
+      basePrice: (data['precoBase'] as num?)?.toDouble() ?? 0.0,
+      totalSeats: data['assentosTotais'] as int? ?? 0,
+      reservedSeats: data['assentosReservados'] as int? ?? 0,
+      paidSeats: data['assentosPagos'] as int? ?? 0,
+      slug: data['slug'] ?? '',
+      idResponsible: data['idResponsavel'] ?? '',
+      empresa: data['empresa'] ?? '', // Lendo do Firestore
+      isDeleted: data['excluido'] ?? false,
+      status: _parseStatus(data['status']),
+      createdAt: (data['criadoEm'] as Timestamp?)?.toDate(),
+      updatedAt: (data['atualizadoEm'] as Timestamp?)?.toDate(),
     );
   }
 
-  // Método copyWith (muito útil para imutabilidade e gerenciamento de estado)
+  static String _statusToString(ExcursionStatus status) {
+    switch (status) {
+      case ExcursionStatus.programada: return 'PROGRAMADA';
+      case ExcursionStatus.emAndamento: return 'EM_ANDAMENTO';
+      case ExcursionStatus.concluida: return 'CONCLUIDA';
+      case ExcursionStatus.cancelada: return 'CANCELADA';
+    }
+  }
+
+  static ExcursionStatus _parseStatus(String? status) {
+    switch (status) {
+      case 'PROGRAMADA': return ExcursionStatus.programada;
+      case 'EM_ANDAMENTO': return ExcursionStatus.emAndamento;
+      case 'CONCLUIDA': return ExcursionStatus.concluida;
+      case 'CANCELADA': return ExcursionStatus.cancelada;
+      default: return ExcursionStatus.programada;
+    }
+  }
+
   Excursion copyWith({
     String? id,
     String? name,
-    DateTime? date,
-    double? price,
-    int? totalSeats,
-    String? location,
     String? description,
+    String? idMainDestination,
+    DateTime? startDate,
+    DateTime? returnDate,
+    double? basePrice,
+    int? totalSeats,
+    int? reservedSeats,
+    int? paidSeats,
+    String? slug,
     ExcursionStatus? status,
-    List<Participant>? participants,
-    bool? isFeatured,
+    String? idResponsible,
+    String? empresa, // NOVO no copyWith
+    bool? isDeleted,
   }) {
     return Excursion(
       id: id ?? this.id,
       name: name ?? this.name,
-      date: date ?? this.date,
-      price: price ?? this.price,
-      totalSeats: totalSeats ?? this.totalSeats,
-      location: location ?? this.location,
       description: description ?? this.description,
+      idMainDestination: idMainDestination ?? this.idMainDestination,
+      startDate: startDate ?? this.startDate,
+      returnDate: returnDate ?? this.returnDate,
+      basePrice: basePrice ?? this.basePrice,
+      totalSeats: totalSeats ?? this.totalSeats,
+      reservedSeats: reservedSeats ?? this.reservedSeats,
+      paidSeats: paidSeats ?? this.paidSeats,
+      slug: slug ?? this.slug,
       status: status ?? this.status,
-      participants: participants ?? this.participants,
-      isFeatured: isFeatured ?? this.isFeatured,
+      idResponsible: idResponsible ?? this.idResponsible,
+      empresa: empresa ?? this.empresa,
+      isDeleted: isDeleted ?? this.isDeleted,
     );
   }
 }

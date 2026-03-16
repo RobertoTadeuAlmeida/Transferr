@@ -1,0 +1,17 @@
+table Excursoes{
+  id uuid [pk]
+  nome string [not null]
+  descricao string
+  idDestinoPrincipal uuid [not null]
+  dataPartida datetime [not null]
+  dataRetorno datetime [not null]
+  precoBase number [not null]
+  assentosTotais number [not null]
+  assentosReservados number [not null]
+  slug string [unique]
+  status enum('EM_ANDAMENTO', 'CONCLUIDA', 'CANCELADA')
+  idResponsavel uuid [not null]
+  criadoEm timestamp [default: `now()`]
+  atualizadoEm timestamp [default: `now()`]
+  deletadoEm timestamp
+}

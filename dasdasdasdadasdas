@@ -1,0 +1,246 @@
+[33mcommit 2da912347ae1debc7b0045f11e4c1ee3182fcc3f[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mdevelopment[m[33m)[m
+Author: Roberto <robertotadeudealmeida@gmail.com>
+Date:   Thu Mar 5 18:47:20 2026 -0300
+
+    teste de commit
+
+[33mcommit d76fa4e855a100692df4a878cf4610561b98c620[m[33m ([m[1;31morigin/development[m[33m)[m
+Author: Roberto <robertotadeudealmeida@gmail.com>
+Date:   Tue Mar 3 18:11:02 2026 -0300
+
+    ajuste n a arquitetura do projeto adição da camada service e concerto em logicas das telas
+
+[33mcommit aa45a2d3ec9b079e0fccf800cb306600e2f23aa3[m
+Author: Roberto <robertotadeudealmeida@gmail.com>
+Date:   Thu Feb 5 15:35:18 2026 -0300
+
+    feat(ui): aprimora visual do PassengerCrmCard com status de atividade
+
+[33mcommit f3dc245274c2d63d4884cac0393560b532a30ab3[m
+Author: Roberto <robertotadeudealmeida@gmail.com>
+Date:   Sat Jan 24 20:30:21 2026 -0300
+
+    feat(ui): refatorar fluxo de passageiros e mapa de assentos- Integração total com AppTheme (Cores, Tipografia e Material 3).
+    - Implementação da Base Global de Passageiros (histórico de viagens).
+    - Adição de indicadores financeiros (Pago vs Restante) nos cards de passageiros.
+    - Refatoração do Mapa de Assentos com painel de detalhes dinâmico.
+    - Correção de bugs de ciclo de vida (setState durante build) com microtasks.
+    - Padronização de nomes de variáveis de 'totalViagens' para 'totalTrips'.
+
+[33mcommit 5d2a34d3745aaa4b096b84be272e4fb12fcfd2aa[m
+Author: Roberto <robertotadeudealmeida@gmail.com>
+Date:   Sat Jan 24 20:29:45 2026 -0300
+
+    feat: refactor passenger flow and seat map with AppTheme integration
+
+[33mcommit 347abb93862eb589f9b1d17d1756a9b862092423[m
+Author: Roberto <robertotadeudealmeida@gmail.com>
+Date:   Tue Dec 30 11:43:00 2025 -0300
+
+    refactor(UI): Unifica toda a UI com o sistema de tema AppTheme
+    
+    Refatora todas as telas e widgets para usar o novo sistema de design centralizado. Remove estilos e cores locais, garantindo consistência visual e facilitando a manutenção futura.
+
+[33mcommit 8d1b0470c93beefd233ac27a829e60b57fbbc061[m
+Author: Roberto <robertotadeudealmeida@gmail.com>
+Date:   Tue Dec 23 20:29:06 2025 -0300
+
+    feat: Formata valores monetários e refatora getters
+    
+    Implementa a formatação de moeda em toda a aplicação para exibir valores de forma mais legível (ex: R$ 1.234,56), utilizando uma extensão reutilizável no tipo 'double'.
+    
+    Além disso, os getters no modelo 'Excursion' foram refatorados para maior clareza, removendo duplicidades e corrigindo a lógica de cálculo do faturamento esperado.
+    
+    Alterações principais:
+    
+    - **feat(utils):** Adiciona o arquivo 'double_extensions.dart' com o método '.toCurrency()' para formatação de moeda padrão BRL.
+    
+    - **refactor(models):** Consolida e renomeia getters financeiros em 'excursion.dart'. 'maxTheoreticalRevenue' foi removido em favor de 'expectedRevenueFromConfirmed' para simplificar a refatoração e a lógica foi ajustada para 'totalSeats * pricePerPerson'.
+    
+    - **fix(models):** Corrige o método 'copyWith' em 'excursion.dart' para garantir que 'pricePerPerson' e outros campos mantenham seus valores quando não são substituídos, resolvendo o bug de cálculos resultando em zero.
+    
+    - **refactor(ui):** Atualiza 'FinancialSummaryCard', 'InfoCard' e o 'MetricCard' de 'Arrecadado' na 'ExcursionDashboardPage' para usar a nova extensão '.toCurrency()', garantindo uma apresentação de dados consistente.
+
+[33mcommit fd18225f2fe3d9d16ff7c87df5aac661d53d18cb[m
+Author: Roberto <robertotadeudealmeida@gmail.com>
+Date:   Thu Dec 18 13:07:29 2025 -0300
+
+    feat: Implementa CRUD de Clientes e estrutura de navegação
+    
+    Implementa a funcionalidade completa de gerenciamento de clientes, incluindo:
+    - Adicionar, editar e deletar clientes com confirmação.
+    - Listagem de clientes com busca em tempo real por nome, CPF e telefone.
+    - Indicador de status visual (ativo/inativo) no card do cliente.
+    - Otimização da performance da tela de busca com o widget Consumer.
+    
+    Além disso, a estrutura de navegação principal foi refatorada:
+    - Criação de um widget AppDrawer reutilizável para o menu lateral.
+    - Implementação da tela de Configurações com opção de Logout.
+    - Ajuste da navegação entre telas para usar rotas nomeadas e pushReplacementNamed, prevenindo o empilhamento desnecessário de telas.
+
+[33mcommit 70e1e836b073dc1aff7028f6b9cbdbdb9729ed45[m
+Merge: 043be27 5a25c69
+Author: Roberto <robertotadeudealmeida@gmail.com>
+Date:   Wed Dec 10 19:11:37 2025 -0300
+
+    Merge branch 'feature/featured-excursions' into development
+
+[33mcommit 5a25c6954737d345c6369f34f0a54190483b5660[m[33m ([m[1;31morigin/detached[m[33m)[m
+Author: Roberto <robertotadeudealmeida@gmail.com>
+Date:   Wed Dec 10 19:06:48 2025 -0300
+
+    feat(excursions): Implementa histórico e gerenciamento em lote
+    
+    - Refatora ExcursionProvider para separar excursões ativas e histórico (concluídas/canceladas).
+    - Cria a tela 'HistoryPage' para exibir excursões arquivadas.
+    - Implementa exclusão em lote na tela de excursões ativas com modo de seleção ativado por clique longo.
+    - Adiciona exclusão individual no histórico por 'Dismissible' (arrastar para o lado).
+    - Adiciona seleção por Checkbox e exclusão em lote na tela de histórico.
+    - Implementa a funcionalidade de 'Limpar Histórico' com diálogo de confirmação.
+    - Refatora o 'ExcursionCard' para ser mais flexível, suportando diferentes contextos (lista ativa vs. histórico) e desabilitando ações (clique, destaque) quando necessário.
+    - Reposiciona o Chip de status do card para o canto inferior direito para um design mais limpo.
+
+[33mcommit 4efeb40aa464a086ea82c924e9ae9717f07e47b9[m
+Author: Roberto <robertotadeudealmeida@gmail.com>
+Date:   Tue Dec 9 13:38:45 2025 -0300
+
+    Versão estavel do app
+
+[33mcommit 649da9bd324309fbfd25a051faf4176bca02f2df[m
+Merge: 2e5282f 1398f4e
+Author: Roberto Tadeu <134324353+RobertoTadeuAlmeida@users.noreply.github.com>
+Date:   Mon Dec 8 23:04:20 2025 -0300
+
+    Merge pull request #3 from RobertoTadeuAlmeida/feature/dashboard-e-menu-inicial
+    
+    Feature/dashboard e menu inicial
+
+[33mcommit 1398f4eeef7c472bd6f099ae4dc3f75cac4ce371[m
+Author: Roberto <robertotadeudealmeida@gmail.com>
+Date:   Thu Nov 27 14:12:23 2025 -0300
+
+    feat: Finalizar otimizaçao e estabiliza a arquitetura reativa
+
+[33mcommit 88da6ed1b5de62b7aeffbbdd7da5226f83281477[m
+Author: Roberto <robertotadeudealmeida@gmail.com>
+Date:   Fri Nov 21 16:10:28 2025 -0300
+
+    feat(home): Constrói dashboard e menu de navegação
+
+[33mcommit 26da41754c57fafe8e5509320b103e68e91ad89c[m
+Author: Roberto <robertotadeudealmeida@gmail.com>
+Date:   Fri Nov 21 16:02:24 2025 -0300
+
+    feat(home): Constrói dashboard inicial e menu de navegação
+    
+    - Adiciona cards de resumo para pagamentos e assentos ocupados.
+    - Cria a estrutura do menu lateral (Drawer) com navegação para as seções principais: Dashboard, Excursões, Clientes, Finanças e Configurações.
+    - Exibe o nome e e-mail do usuário logado no cabeçalho do menu.
+    - Inclui a funcionalidade de logout (Sair) no menu.
+    - Corrige o bug de crash na renderização do nome do usuário (null-safe operator).
+
+[33mcommit 06cc8ec84df7f442097053179994b4e641c85775[m
+Author: Roberto <robertotadeudealmeida@gmail.com>
+Date:   Tue Nov 18 12:46:03 2025 -0300
+
+    feat: Refatora a seção de clientes com Provider
+
+[33mcommit 79ccf43f16c09544f871f90febb1e54bf482d789[m
+Author: Roberto <robertotadeudealmeida@gmail.com>
+Date:   Wed Nov 12 22:27:03 2025 -0300
+
+    feat: Refatora providers e modelos de excursão
+
+[33mcommit 2e5282f7e86413a60c9a830260bd49def6c9fea7[m
+Author: Roberto <robertotadeudealmeida@gmail.com>
+Date:   Thu Nov 6 19:06:58 2025 -0300
+
+    feat: Refatora arquitetura da Home com Provider e Repository
+    
+    Implementa a arquitetura reativa na tela principal do aplicativo.
+    
+    - O ExcursionProvider agora utiliza uma Stream para ouvir as atualizações do Firestore em tempo real, eliminando a necessidade de recargas manuais.
+    - A HomePage foi refatorada para consumir os dados e estados (isLoading, listas, totais calculados) diretamente do ExcursionProvider usando context.watch.
+    - A lógica de cálculo de totais (receita, pagamentos) foi movida para getters computados dentro do provider.
+    - Removido o botão de refresh manual, que se tornou obsoleto com a arquitetura reativa.
+    - A inicialização do app foi centralizada no construtor do provider, limpando a classe MyApp.
+
+[33mcommit 043be27ba1ef43ffc2571f376c5f154204b0aecd[m
+Merge: 24a5c4c c7deb2b
+Author: Roberto Tadeu <134324353+RobertoTadeuAlmeida@users.noreply.github.com>
+Date:   Thu Oct 16 15:47:00 2025 -0300
+
+    Merge pull request #2 from RobertoTadeuAlmeida/main
+    
+    conflito talvez
+
+[33mcommit c7deb2b240091c03be51821ea4ff3338feb4ad6a[m
+Merge: 283cb9f d79863c
+Author: Roberto Tadeu <134324353+RobertoTadeuAlmeida@users.noreply.github.com>
+Date:   Thu Oct 16 15:44:21 2025 -0300
+
+    Merge pull request #1 from RobertoTadeuAlmeida/feature/nome-da-feature
+    
+    commit de teste
+
+[33mcommit d79863cfbed2606f516c7ab2c14de876ac269db3[m
+Author: Roberto <robertotadeudealmeida@gmail.com>
+Date:   Thu Oct 16 15:41:58 2025 -0300
+
+    commit de teste
+
+[33mcommit 283cb9fb914ecd2bbfafa19891d901f0c9d70dc7[m
+Author: Roberto <robertotadeudealmeida@gmail.com>
+Date:   Thu Oct 16 15:38:46 2025 -0300
+
+    restore commits
+
+[33mcommit 24a5c4c1e8f8c31747c14eb03ff08c1d5fa32df6[m
+Author: Roberto Tadeu <134324353+RobertoTadeuAlmeida@users.noreply.github.com>
+Date:   Wed Apr 23 18:54:05 2025 -0300
+
+    Completei o Diagrama de classes
+
+[33mcommit ebb6d2ba2d0964da38bf71ad37b8a426e8cdf3a2[m
+Author: Roberto Tadeu <134324353+RobertoTadeuAlmeida@users.noreply.github.com>
+Date:   Sun Apr 20 19:17:11 2025 -0300
+
+    funcionalidades no diagrama de caso de uso
+
+[33mcommit f23dd2d7522482d8536c42fe2ff78b7f27e808ca[m
+Author: Roberto Tadeu <134324353+RobertoTadeuAlmeida@users.noreply.github.com>
+Date:   Sun Apr 20 19:10:18 2025 -0300
+
+    Delete diagramas/img.png
+    
+    deletei o diagrama de caso de uso antigo
+
+[33mcommit 7bb36bcfae996d6987cf937d2b18485f95c71103[m
+Author: Roberto Tadeu <134324353+RobertoTadeuAlmeida@users.noreply.github.com>
+Date:   Sun Apr 20 19:08:58 2025 -0300
+
+    Diagrama de caso de uso concluído
+
+[33mcommit ebf8fd350a6527909061ca9f246ee64425994093[m
+Author: Roberto Tadeu <134324353+RobertoTadeuAlmeida@users.noreply.github.com>
+Date:   Sat Apr 19 19:30:55 2025 -0300
+
+    Adicionado Diagrama caso de uso transferr
+
+[33mcommit b374a02f5d227a742c82b104f59b2f0608e201c0[m
+Author: Roberto <robertotadeudealmeida@gmail.com>
+Date:   Sat Apr 19 19:30:08 2025 -0300
+
+    Criei um diretorio para diagramas
+
+[33mcommit 5c456288fb62b38cf455a3459ab7a00cd8baab3c[m
+Author: Roberto <robertotadeudealmeida@gmail.com>
+Date:   Sat Apr 19 19:28:25 2025 -0300
+
+    Criei um diretorio para diagramas
+
+[33mcommit 47a609836355c51658b51456aad5d5805925104b[m
+Author: Roberto Tadeu <134324353+RobertoTadeuAlmeida@users.noreply.github.com>
+Date:   Sat Apr 19 19:19:48 2025 -0300
+
+    Initial commit

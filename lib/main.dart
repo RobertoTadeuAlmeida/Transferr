@@ -1,46 +1,54 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:transferr/firebase_options.dart';
-import 'package:transferr/providers/client_provider.dart';
-import 'package:transferr/screens/auth_wrapper.dart';
-import 'package:transferr/screens/excursion_dashboard_page.dart';
-import 'dart:convert';
-import 'models/excursion.dart';
-import 'models/client.dart';
-import 'providers/excursion_provider.dart';
-import 'screens/home_page.dart';
-import 'screens/excursions/excursion_details_page.dart';
-import 'screens/clients_list_page.dart';
-import 'screens/client_details_page.dart';
-import 'screens/finance_page.dart';
 
-final String appId = const String.fromEnvironment(
-  '1:893379584608:android:25ef44854c6cbde0071905',
-  defaultValue: 'transferr-gestao-dev',
-);
-final String firebaseConfigString = const String.fromEnvironment(
-  'FIREBASE_CONFIG',
-  defaultValue: '{}',
-);
-final String initialAuthToken = const String.fromEnvironment(
-  'INITIAL_AUTH_TOKEN',
-  defaultValue: '',
-);
+// Providers
+import 'package:transferr/providers/user_provider.dart';
+import 'package:transferr/providers/excursion_provider.dart';
+import 'package:transferr/providers/auth_provider.dart';
+import 'package:transferr/providers/passenger_provider.dart';
+
+// Screens - Auth & Geral
+import 'package:transferr/screens/login/auth_wrapper.dart';
+import 'package:transferr/screens/register/registration_page.dart';
+import 'package:transferr/screens/home_page.dart';
+import 'package:transferr/screens/settings/settings_page.dart';
+
+// Screens - Excursões
+import 'package:transferr/screens/excursions/excursions_page.dart';
+import 'package:transferr/screens/excursions/excursion_dashboard_page.dart';
+import 'package:transferr/screens/excursions/add_excursion_page.dart';
+import 'package:transferr/screens/excursions/excursion_seat_map_page.dart';
+import 'package:transferr/screens/excursions/checkin_page.dart';
+import 'package:transferr/screens/excursions/history_page.dart';
+
+// Screens - Passageiros
+import 'package:transferr/screens/passengers/add_passenger_page.dart';
+import 'package:transferr/screens/passengers/global_passengers_page.dart';
+import 'package:transferr/screens/passengers/passengers_list_page.dart';
+import 'package:transferr/screens/passengers/passenger_details_page.dart';
+
+// Screens - Equipe & Finanças
+import 'package:transferr/screens/users/users_list_page.dart';
+import 'package:transferr/screens/users/add_user_page.dart';
+import 'package:transferr/screens/finance/finance_page.dart';
+import 'package:transferr/screens/finance/excursion_finance_page.dart';
+
+import 'config/theme/app_theme.dart';
+import 'models/excursion.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
   runApp(
     MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (context) => ExcursionProvider()),
-        ChangeNotifierProvider(create: (context) => ClientProvider()),
+        ChangeNotifierProvider(create: (_) => AuthProvider()),
+        ChangeNotifierProvider(create: (_) => ExcursionProvider()),
+        ChangeNotifierProvider(create: (_) => UserProvider()),
+        ChangeNotifierProvider(create: (_) => PassengerProvider()),
       ],
       child: const MyApp(),
     ),
@@ -54,85 +62,138 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Transferr',
-      theme: ThemeData(
-        scaffoldBackgroundColor: const Color(0xFF1A1A1A),
-        fontFamily: 'Inter',
-        visualDensity: VisualDensity.adaptivePlatformDensity,
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFF1A1A1A),
-          foregroundColor: Colors.white,
-          elevation: 0,
-          iconTheme: IconThemeData(color: Colors.white),
-        ),
-        drawerTheme: const DrawerThemeData(backgroundColor: Color(0xFF1A1A1A)),
-        colorScheme: const ColorScheme.dark(
-          primary: Color(0xFFF97316),
-          surface: Color(0xFF1A1A1A),
-          onSurface: Colors.white,
-          secondary: Color(0xFFF97316),
-        ),
-        textTheme: const TextTheme(
-          bodyLarge: TextStyle(color: Colors.white),
-          bodyMedium: TextStyle(color: Colors.white),
-          displayLarge: TextStyle(color: Colors.white),
-          displayMedium: TextStyle(color: Colors.white),
-          displaySmall: TextStyle(color: Colors.white),
-          headlineLarge: TextStyle(color: Colors.white),
-          headlineMedium: TextStyle(color: Colors.white),
-          headlineSmall: TextStyle(color: Colors.white),
-          titleLarge: TextStyle(color: Colors.white),
-          titleMedium: TextStyle(color: Colors.white),
-          titleSmall: TextStyle(color: Colors.white),
-          labelLarge: TextStyle(color: Colors.white),
-          labelMedium: TextStyle(color: Colors.white),
-          labelSmall: TextStyle(color: Colors.white),
-        ),
-        elevatedButtonTheme: ElevatedButtonThemeData(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFFF97316),
-            // Cor de fundo dos botões
-            foregroundColor: Colors.white,
-            // Cor do texto dos botões
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(
-                10.0,
-              ), // Cantos arredondados para botões
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-          ),
-        ),
-        floatingActionButtonTheme: const FloatingActionButtonThemeData(
-          backgroundColor: Color(0xFFF97316), // Cor do FAB
-          foregroundColor: Colors.white, // Cor do ícone/texto do FAB
-        ),
-        cardTheme: CardThemeData(
-          margin: const EdgeInsets.all(8.0),
-          elevation: 4,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(
-              16.0,
-            ), // Cantos arredondados mais proeminentes
-          ),
-          color: const Color(0xFFF97316), // Cor dos cartões
-        ),
-      ),
+      debugShowCheckedModeBanner: false,
+      theme: AppTheme.darkTheme,
       initialRoute: '/',
+
       routes: {
-        '/': (context) => AuthWrapper(),
-        '/excursion_details': (context) {
-          final String excursionId =
-              ModalRoute.of(context)!.settings.arguments as String;
-          return ExcursionDashboardPage(excursionId: excursionId);
+        '/': (context) => const AuthWrapper(),
+        '/register': (context) => const RegistrationPage(),
+        '/home': (context) => const HomePage(),
+        '/excursions': (context) => const ExcursionsPage(),
+        '/add-excursion': (context) => const AddExcursionPage(),
+        '/history': (context) => const HistoryPage(),
+
+        // Gestão de Equipe
+        '/users': (context) => const UsersListPage(),
+        '/add-user': (context) => const AddUserPage(),
+
+        '/excursion-dashboard': (context) {
+          final args = ModalRoute.of(context)?.settings.arguments;
+          if (args is String) {
+            return ExcursionDashboardPage(excursionId: args);
+          }
+          return _errorPage("ID da excursão não encontrado para o Dashboard");
         },
-        '/clients': (context) => const ClientsListPage(),
-        '/client_details': (context) {
-          final String clientId =
-              ModalRoute.of(context)!.settings.arguments as String;
-          return ClientDetailsPage(clientId: clientId);
+
+        '/map-seats': (context) {
+          final args = ModalRoute.of(context)?.settings.arguments;
+          if (args is Map<String, dynamic>) {
+            return ExcursionSeatMapPage(
+              excursionId: args['excursionId'],
+              totalSeats: args['totalSeats'] ?? 44,
+              isSelectionMode: args['isSelectionMode'] ?? false,
+              initialSelectedSeat: args['initialSelectedSeat'],
+            );
+          } else if (args is String) {
+            return ExcursionSeatMapPage(excursionId: args);
+          }
+          return _errorPage("ID da excursão não informado para o mapa de assentos");
+        },
+
+        '/check-in': (context) {
+          final args = ModalRoute.of(context)?.settings.arguments;
+          if (args is Map<String, dynamic>) {
+            return CheckInPage(
+              excursionId: args['excursionId'],
+              destinationName: args['destinationName'] ?? 'Destino não informado',
+            );
+          }
+          return _errorPage("Dados da excursão incompletos para o Check-in");
+        },
+
+        '/global-passengers': (context) {
+          final args = ModalRoute.of(context)?.settings.arguments;
+          if (args is Map<String, dynamic>) {
+            return GlobalPassengersPage(excursionId: args['excursionId']);
+          }
+          return const GlobalPassengersPage();
+        },
+
+        '/passengers-list': (context) {
+          final args = ModalRoute.of(context)?.settings.arguments;
+          if (args is String) {
+            return PassengersListPage(excursionId: args);
+          }
+          return _errorPage("ID da excursão não informado para lista");
+        },
+
+        '/add-passenger': (context) {
+          final args = ModalRoute.of(context)?.settings.arguments;
+          if (args is Map<String, dynamic>) {
+            return AddPassengerPage(
+              excursionId: args['excursionId'],
+              excursionPrice: args['excursionPrice'],
+              passenger: args['passenger'],
+            );
+          }
+          if (args is String) {
+            return AddPassengerPage(excursionId: args);
+          }
+          return _errorPage("Parâmetros insuficientes para adicionar passageiro");
+        },
+
+        '/passenger-details': (context) {
+          final args = ModalRoute.of(context)?.settings.arguments;
+          if (args is Map<String, dynamic>) {
+            return PassengerDetailsPage(
+              passenger: args['passenger'],
+              excursionId: args['excursionId'],
+            );
+          }
+          return _errorPage("Dados do passageiro não encontrados para detalhes");
+        },
+
+        '/excursion-finance': (context) {
+          final args = ModalRoute.of(context)?.settings.arguments;
+          if (args is Excursion) {
+            return ExcursionFinancePage(excursion: args);
+          }
+          return _errorPage("Dados da excursão não encontrados para a planilha financeira");
         },
 
         '/finance': (context) => const FinancePage(),
+        '/settings': (context) => const SettingsPage(),
       },
+
+      onUnknownRoute: (settings) =>
+          MaterialPageRoute(builder: (context) => const AuthWrapper()),
+    );
+  }
+
+  Widget _errorPage(String message) {
+    return Scaffold(
+      appBar: AppBar(title: const Text("Erro de Navegação")),
+      body: Container(
+        padding: const EdgeInsets.all(24),
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline, size: 60, color: Colors.red),
+              const SizedBox(height: 16),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
