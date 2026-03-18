@@ -35,12 +35,11 @@ class UserRepository {
 
   Future<User?> getUserData(String uid) async => (await _userRef.doc(uid).get()).data();
 
-  /// Busca o nome legível da empresa (que é o campo nomeEmpresa do Admin dono daquele ID)
   Future<String> getCompanyName(String companyId) async {
     try {
       final doc = await _firestore.collection(_collection).doc(companyId).get();
       if (doc.exists) {
-        return doc.data()?['nomeEmpresa'] ?? 'Empresa Sem Nome';
+        return doc.data()?['nomeEmpresa'] ?? doc.data()?['nome'] ?? 'Empresa Sem Nome';
       }
       return 'Empresa Desconhecida';
     } catch (e) {
@@ -54,12 +53,21 @@ class UserRepository {
   }
 
   // --- MÉTODOS DE EQUIPE ---
+
+  /// Retorna todos os usuários que fazem parte de uma empresa específica.
+  /// OTIMIZAÇÃO: Filtragem de isActive e Ordenação feitas na memória para evitar erros de Índice Composto e permissão.
   Stream<List<User>> getUsersStream(String companyId) => _userRef
-      .where('empresa', isEqualTo: companyId)
-      .where('isActive', isEqualTo: true)
-      .orderBy('nome')
+      .where('empresas', arrayContains: companyId)
       .snapshots()
-      .map((snapshot) => snapshot.docs.map((doc) => doc.data()).toList());
+      .map((snapshot) {
+        final list = snapshot.docs
+            .map((doc) => doc.data())
+            .where((u) => u.isActive) // Filtro na memória
+            .toList();
+            
+        list.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+        return list;
+      });
 
   Future<void> toggleUserStatus(String id, bool isActive) async {
     await _firestore.collection(_collection).doc(id).update({
@@ -75,6 +83,14 @@ class UserRepository {
     required String fromCompanyName,
     required String toUserId,
   }) async {
+    final existing = await _firestore.collection(_invitesCollection)
+        .where('fromCompanyId', isEqualTo: fromCompanyId)
+        .where('toUserId', isEqualTo: toUserId)
+        .where('status', isEqualTo: 'pendente')
+        .limit(1).get();
+
+    if (existing.docs.isNotEmpty) return;
+
     await _firestore.collection(_invitesCollection).add({
       'fromCompanyId': fromCompanyId,
       'fromCompanyName': fromCompanyName,

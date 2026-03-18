@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:transferr/screens/home_page.dart';
 import '../../providers/auth_provider.dart';
 import 'login_page.dart';
+import 'pending_company_page.dart'; // Import da nova tela de transição
 
 class AuthWrapper extends StatelessWidget {
   const AuthWrapper({super.key});
@@ -11,13 +12,12 @@ class AuthWrapper extends StatelessWidget {
   Widget build(BuildContext context) {
     final authProvider = context.watch<AuthProvider>();
 
-    // 1. ESTADO DE ERRO (O MAIS IMPORTANTE PARA O SEU PROBLEMA)
-    // Se o login no Auth funcionou, mas houve erro ao buscar os dados no Firestore
+    // 1. ESTADO DE ERRO CRÍTICO
     if (authProvider.errorMessage != null && authProvider.currentUser == null) {
       return _buildErrorScreen(context, authProvider);
     }
 
-    // 2. ESTADO DE CARREGAMENTO
+    // 2. ESTADO DE CARREGAMENTO (Sincronizando com o Firestore)
     if (authProvider.isLoading) {
       return const Scaffold(
         body: Center(
@@ -25,7 +25,7 @@ class AuthWrapper extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               CircularProgressIndicator(),
-              SizedBox(height: 16),
+              const SizedBox(height: 16),
               Text(
                 'Sincronizando sua conta...',
                 style: TextStyle(color: Colors.grey, fontWeight: FontWeight.w500),
@@ -36,14 +36,22 @@ class AuthWrapper extends StatelessWidget {
       );
     }
 
-    // 3. USUÁRIO AUTENTICADO
-    if (authProvider.currentUser != null) {
-      // Verificação de conta ativa
-      if (!authProvider.currentUser!.isActive) {
+    // 3. LOGADO: Verificando Contexto de Empresa
+    final user = authProvider.currentUser;
+    if (user != null) {
+      
+      // Verificação de conta desativada globalmente
+      if (!user.isActive) {
         return _buildInactiveAccountScreen(context, authProvider);
       }
 
-      // Se tudo estiver OK, vai para a página inicial (Excursions ou Home)
+      // NOVO FLUXO SAAS: 
+      // Se o usuário logou mas não tem empresa vinculada, ele vai para a tela de transição.
+      if (user.hasNoCompany) {
+        return const PendingCompanyPage();
+      }
+
+      // Se já possui empresa, vai para a Home.
       return const HomePage();
     }
 
@@ -51,7 +59,6 @@ class AuthWrapper extends StatelessWidget {
     return const LoginPage();
   }
 
-  /// Tela para erros críticos (Ex: Falha de conexão, erro de permissão no Firestore)
   Widget _buildErrorScreen(BuildContext context, AuthProvider auth) {
     return Scaffold(
       body: Padding(
@@ -76,7 +83,7 @@ class AuthWrapper extends StatelessWidget {
               width: double.infinity,
               height: 50,
               child: ElevatedButton.icon(
-                onPressed: () => auth.logout(), // Limpa o estado e volta ao login
+                onPressed: () => auth.logout(), 
                 icon: const Icon(Icons.login),
                 label: const Text('TENTAR NOVAMENTE'),
               ),
@@ -87,7 +94,6 @@ class AuthWrapper extends StatelessWidget {
     );
   }
 
-  /// Tela para contas desativadas
   Widget _buildInactiveAccountScreen(BuildContext context, AuthProvider auth) {
     return Scaffold(
       body: Padding(
@@ -103,7 +109,7 @@ class AuthWrapper extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             const Text(
-              'Sua conta está inativa no momento. Por favor, entre em contato com o administrador do sistema.',
+              'Sua conta está inativa no momento. Por favor, entre em contato com o suporte.',
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.grey, fontSize: 16),
             ),

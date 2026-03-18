@@ -34,7 +34,6 @@ class UserService {
   // REGRAS DE NEGÓCIO: SISTEMA DE CONVITES
   // ===========================================================================
 
-  /// Envia um convite buscando pelo E-MAIL (Mais seguro e evita PERMISSION_DENIED de ID)
   Future<void> sendInvite({
     required String fromCompanyId,
     required String fromCompanyName,
@@ -43,19 +42,16 @@ class UserService {
   }) async {
     final email = toUserEmail.trim().toLowerCase();
 
-    // 1. Regra: Buscar usuário pelo e-mail
     final targetUser = await _userRepo.getUserByEmail(email);
     
     if (targetUser == null) {
       throw Exception("Usuário com este e-mail não encontrado no Transferr.");
     }
 
-    // 2. Regra: Não pode convidar a si mesmo
     if (targetUser.id == currentUserId) {
       throw Exception("Você não pode enviar um convite para si mesmo.");
     }
 
-    // 3. Regra: Verificar se já está na equipe
     if (targetUser.companies.contains(fromCompanyId)) {
       throw Exception("Este usuário já faz parte da sua equipe.");
     }
@@ -72,24 +68,40 @@ class UserService {
     return _userRepo.getPendingInvites(userId);
   }
 
+  /// Responde ao convite garantindo a integridade dos múltiplos papéis (Roles)
   Future<void> respondToInvite({
     required String inviteId,
     required String status,
     required User currentUser,
     required String companyId,
   }) async {
+    // 1. Atualiza o status do convite no banco
     await _userRepo.respondToInvite(inviteId, status);
     
     if (status == 'aceito') {
+      // 2. Atualiza a lista de empresas vinculadas
       final List<String> updatedCompanies = List.from(currentUser.companies);
-      
       if (!updatedCompanies.contains(companyId)) {
         updatedCompanies.add(companyId);
       }
+
+      // 3. ATUALIZA OS PAPÉIS (ROLES): 
+      // Todo usuário convidado entra inicialmente como 'AGENTE' na organização.
+      // O Admin da empresa pode promover para 'ADMIN' depois se desejar.
+      final Map<String, String> updatedRoles = Map.from(currentUser.roles);
+      updatedRoles[companyId] = 'AGENTE';
+      
+      // 4. Se o usuário não tiver NENHUMA empresa ativa (recém cadastrado), 
+      // definimos esta como a padrão.
+      String newActiveCompany = currentUser.company;
+      if (newActiveCompany.isEmpty) {
+        newActiveCompany = companyId;
+      }
       
       final updatedUser = currentUser.copyWith(
-        company: companyId, 
+        company: newActiveCompany, 
         companies: updatedCompanies,
+        roles: updatedRoles,
         isActive: true,
       );
       

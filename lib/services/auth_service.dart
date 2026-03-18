@@ -15,14 +15,6 @@ class AuthService {
 
   Future<void> saveUserData(User user) => _userRepo.saveUserData(user);
 
-  Future<void> sendPasswordReset(String email) async {
-    try {
-      await fb_auth.FirebaseAuth.instance.sendPasswordResetEmail(email: email.trim());
-    } catch (e) {
-      throw _handleError(e);
-    }
-  }
-
   Future<void> switchActiveCompany(String uid, String newCompanyId) async {
     try {
       String newName = "Sem Empresa";
@@ -35,8 +27,32 @@ class AuthService {
         'nomeEmpresa': newName,
       });
     } catch (e) {
-      throw _handleError(e);
+      throw e.toString();
     }
+  }
+
+  /// Transforma um Agente em Admin criando sua própria empresa
+  Future<void> createOwnCompany(User user, String companyName) async {
+    final String uid = user.id;
+    
+    // Novo mapa de papéis incluindo a si mesmo como ADMIN da nova empresa
+    final Map<String, String> updatedRoles = Map.from(user.roles);
+    updatedRoles[uid] = 'ADMIN';
+
+    final List<String> updatedCompanies = List.from(user.companies);
+    if (!updatedCompanies.contains(uid)) {
+      updatedCompanies.add(uid);
+    }
+
+    final updatedUser = user.copyWith(
+      company: uid,
+      companyName: companyName,
+      companies: updatedCompanies,
+      roles: updatedRoles,
+      profile: 'ADMIN', // Ele passa a ser Admin globalmente também
+    );
+
+    await _userRepo.saveUserData(updatedUser);
   }
 
   Future<void> register(User user, String password) async {
@@ -45,19 +61,25 @@ class AuthService {
       userCredential = await _userRepo.signUp(user.email, password);
       final String uid = userCredential.user!.uid;
       
-      // LOGICA SAAS:
-      // Se for ADMIN: Ele é o dono da empresa. O ID da empresa é o seu UID.
-      // Se for AGENTE: Ele entra sem empresa (vazio), aguardando convite.
-      final String companyId = user.isAdmin ? uid : "";
-      final String companyName = user.isAdmin ? user.company : "Aguardando Vínculo";
-      final List<String> companies = user.isAdmin ? [uid] : [];
+      // LOGICA MULTI-ROLE:
+      Map<String, String> roles = {};
+      String companyId = "";
+      String companyName = "Aguardando Vínculo";
+      List<String> companies = [];
+
+      if (user.profile == 'ADMIN') {
+        companyId = uid;
+        companyName = user.company; // O campo company aqui veio do form como nome
+        companies = [uid];
+        roles[uid] = 'ADMIN';
+      }
 
       final userWithId = user.copyWith(
         id: uid,
         company: companyId,
         companyName: companyName,
         companies: companies,
-        profile: user.profile, // Mantém o perfil escolhido (ADMIN ou AGENTE)
+        roles: roles,
       );
 
       await _userRepo.saveUserData(userWithId);
@@ -66,7 +88,7 @@ class AuthService {
       if (userCredential?.user != null) {
         await _userRepo.deleteAuthUser(userCredential!.user);
       }
-      throw _handleError(e);
+      throw e.toString();
     }
   }
 
@@ -74,33 +96,7 @@ class AuthService {
     try {
       await _userRepo.signIn(email, password);
     } catch (e) {
-      throw _handleError(e);
+      throw e.toString();
     }
-  }
-
-  Future<void> updateProfile({required String name, String? photoUrl}) async {
-    final user = currentUser;
-    if (user == null) throw Exception("Nenhum usuário logado.");
-    try {
-      await user.updateDisplayName(name);
-      if (photoUrl != null) await user.updatePhotoURL(photoUrl);
-      await _userRepo.updateUserData(user.uid, {
-        'nome': name,
-        if (photoUrl != null) 'photoUrl': photoUrl,
-      });
-    } catch (e) {
-      throw _handleError(e);
-    }
-  }
-
-  String _handleError(dynamic e) {
-    if (e is fb_auth.FirebaseAuthException) {
-      switch (e.code) {
-        case 'email-already-in-use': return 'Este e-mail já está em uso.';
-        case 'network-request-failed': return 'Erro de conexão com a internet.';
-        default: return e.message ?? 'Erro inesperado na autenticação.';
-      }
-    }
-    return e.toString().replaceFirst('Exception: ', '');
   }
 }

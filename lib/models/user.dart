@@ -2,16 +2,17 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 class User {
   final String id;
-  final String company; // ID da Empresa (Map to 'empresa' ou 'company')
-  final String companyName; // Nome Fantasia (Map to 'nomeEmpresa')
-  final List<String> companies; // IDs de todas as empresas vinculadas
+  final String company; // Empresa ativa no momento
+  final String companyName;
+  final List<String> companies; // Lista de IDs das empresas que ele pertence
+  final Map<String, String> roles; // { "id_empresa": "ADMIN" ou "AGENTE" }
   final String name; 
   final String email;
   final String phone;
   final String document;
   final String password;
   final DateTime birthDate;
-  final String profile; 
+  final String profile; // Perfil global (último papel ou papel principal)
   final bool isActive;
 
   final String zipCode;
@@ -23,13 +24,13 @@ class User {
 
   final DateTime createdAt;
   final DateTime? updatedAt;
-  final DateTime? deletedAt;
 
   User({
     required this.id,
     required this.company,
     this.companyName = '',
     this.companies = const [],
+    this.roles = const {},
     required this.name,
     required this.email,
     required this.phone,
@@ -46,17 +47,26 @@ class User {
     required this.state,
     required this.createdAt,
     this.updatedAt,
-    this.deletedAt,
   });
 
-  bool get isAdmin => profile.toUpperCase() == 'ADMIN';
-  bool get isAgente => profile.toUpperCase() == 'AGENTE';
+  // ===========================================================================
+  // ----------- GETTERS DE COMPATIBILIDADE E LOGICA -----------
+  // ===========================================================================
+
+  /// Verifica se o usuário é ADMIN (Global ou na empresa atual)
+  bool get isAdmin => profile.toUpperCase() == 'ADMIN' || roles[company] == 'ADMIN';
+  
+  /// Verifica se o usuário é AGENTE
+  bool get isAgente => !isAdmin;
+
+  bool get hasNoCompany => companies.isEmpty && company.isEmpty;
 
   Map<String, dynamic> toMap() {
     return {
       'empresa': company,
       'nomeEmpresa': companyName,
-      'empresas': companies.isEmpty ? [company] : companies,
+      'empresas': companies,
+      'papeis': roles,
       'nome': name,
       'email': email,
       'telefone': phone,
@@ -72,48 +82,44 @@ class User {
       'estado': state,
       'criadoEm': Timestamp.fromDate(createdAt),
       if (updatedAt != null) 'atualizadoEm': Timestamp.fromDate(updatedAt!),
-      if (deletedAt != null) 'deletadoEm': Timestamp.fromDate(deletedAt!),
     };
   }
 
   factory User.fromMap(String id, Map<String, dynamic> map) {
-    // FLEXIBILIDADE: Tenta ler 'empresa' ou 'company' ou o próprio 'id' (para admins antigos)
-    final String activeCompany = map['empresa'] ?? map['company'] ?? id;
+    final String activeCompany = map['empresa'] ?? '';
+    
+    Map<String, String> rolesMap = {};
+    if (map['papeis'] != null) {
+      rolesMap = Map<String, String>.from(map['papeis']);
+    }
 
     List<String> companiesList = [];
     if (map['empresas'] != null) {
       companiesList = List<String>.from(map['empresas']);
-    } else if (map['companies'] != null) {
-      companiesList = List<String>.from(map['companies']);
-    }
-    
-    // Se a lista estiver vazia, garante que a empresa ativa esteja nela
-    if (companiesList.isEmpty) {
-      companiesList = [activeCompany];
     }
 
     return User(
       id: id,
       company: activeCompany,
-      companyName: map['nomeEmpresa'] ?? map['companyName'] ?? '',
+      companyName: map['nomeEmpresa'] ?? '',
       companies: companiesList,
-      name: map['nome'] ?? map['name'] ?? '',
+      roles: rolesMap,
+      name: map['nome'] ?? '',
       email: map['email'] ?? '',
-      phone: map['telefone'] ?? map['phone'] ?? '',
-      document: map['documento'] ?? map['document'] ?? '',
+      phone: map['telefone'] ?? '',
+      document: map['documento'] ?? '',
       password: '',
-      birthDate: (map['dataNascimento'] as Timestamp? ?? map['birthDate'] as Timestamp? ?? Timestamp.now()).toDate(),
-      profile: map['perfil'] ?? map['profile'] ?? 'AGENTE',
+      birthDate: (map['dataNascimento'] as Timestamp? ?? Timestamp.now()).toDate(),
+      profile: map['perfil'] ?? 'AGENTE',
       isActive: map['isActive'] ?? true,
-      zipCode: map['cep'] ?? map['zipCode'] ?? '',
-      address: map['endereco'] ?? map['address'] ?? '',
-      number: map['numero'] ?? map['number'] ?? '',
-      neighborhood: map['bairro'] ?? map['neighborhood'] ?? '',
-      city: map['cidade'] ?? map['city'] ?? '',
-      state: map['estado'] ?? map['state'] ?? '',
-      createdAt: (map['criadoEm'] as Timestamp? ?? map['createdAt'] as Timestamp? ?? Timestamp.now()).toDate(),
-      updatedAt: (map['atualizadoEm'] as Timestamp? ?? map['updatedAt'] as Timestamp?)?.toDate(),
-      deletedAt: (map['deletadoEm'] as Timestamp? ?? map['deletedAt'] as Timestamp?)?.toDate(),
+      zipCode: map['cep'] ?? '',
+      address: map['endereco'] ?? '',
+      number: map['numero'] ?? '',
+      neighborhood: map['bairro'] ?? '',
+      city: map['cidade'] ?? '',
+      state: map['estado'] ?? '',
+      createdAt: (map['criadoEm'] as Timestamp? ?? Timestamp.now()).toDate(),
+      updatedAt: (map['atualizadoEm'] as Timestamp?)?.toDate(),
     );
   }
 
@@ -122,6 +128,7 @@ class User {
     String? company,
     String? companyName,
     List<String>? companies,
+    Map<String, String>? roles,
     String? name,
     String? email,
     String? phone,
@@ -137,13 +144,13 @@ class User {
     String? city,
     String? state,
     DateTime? updatedAt,
-    DateTime? deletedAt,
   }) {
     return User(
       id: id ?? this.id,
       company: company ?? this.company,
       companyName: companyName ?? this.companyName,
       companies: companies ?? this.companies,
+      roles: roles ?? this.roles,
       name: name ?? this.name,
       email: email ?? this.email,
       phone: phone ?? this.phone,
@@ -160,7 +167,6 @@ class User {
       state: state ?? this.state,
       createdAt: createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
-      deletedAt: deletedAt ?? this.deletedAt,
     );
   }
 }

@@ -35,11 +35,20 @@ class ExcursionProvider with ChangeNotifier {
       : _service = service ??
             ExcursionService(ExcursionRepository(), PassengerRepository());
 
+  /// Limpa os dados e cancela as assinaturas (Essencial para logout seguro)
+  void clearData() {
+    _excursionSubscription?.cancel();
+    _excursionSubscription = null;
+    _excursions = [];
+    _currentCompanyId = null;
+    _isLoading = false;
+    notifyListeners();
+  }
+
   // =========================================================================
   // SINCRONIZAÇÃO EM TEMPO REAL
   // =========================================================================
 
-  /// Escuta as excursões pela Empresa (companyId) para bater com as Security Rules
   void listenToExcursions(String? companyId) {
     if (companyId == null || companyId.isEmpty) {
       _excursions = [];
@@ -119,9 +128,6 @@ class ExcursionProvider with ChangeNotifier {
   Future<void> addExcursion(Excursion excursion, String companyId) async {
     _setLoading(true);
     try {
-      // Prioridade 1: ID passado por parâmetro (mais seguro)
-      // Prioridade 2: ID que já está no objeto
-      // Prioridade 3: ID interno do provider
       final String finalCompany = companyId.isNotEmpty 
           ? companyId 
           : (excursion.empresa.isNotEmpty ? excursion.empresa : (_currentCompanyId ?? ''));
@@ -132,10 +138,7 @@ class ExcursionProvider with ChangeNotifier {
 
       final newExcursion = excursion.copyWith(empresa: finalCompany); 
       await _service.createExcursion(newExcursion);
-      
-      debugPrint("💾 EXCURSION_PROVIDER: Excursão salva com sucesso para a empresa $finalCompany");
     } catch (e) {
-      debugPrint("❌ EXCURSION_PROVIDER (addExcursion): $e");
       rethrow;
     } finally {
       _setLoading(false);

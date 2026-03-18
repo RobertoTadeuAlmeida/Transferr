@@ -10,37 +10,56 @@ class UserProvider with ChangeNotifier {
   StreamSubscription? _inviteSubscription;
 
   List<User> _allUsers = [];
+  List<User> _filteredUsers = []; 
   List<Map<String, dynamic>> _pendingInvites = [];
   bool _isLoading = false;
   String? _error;
   String _searchTerm = '';
   String? _currentCompanyId;
-  String? _currentInviteUserId; // PERFORMANCE: Cache para evitar re-sub de convites
+  String? _currentInviteUserId;
 
   UserProvider({UserService? service})
       : _service = service ?? UserService(UserRepository());
 
-  List<User> get users {
-    if (_searchTerm.isEmpty) return _allUsers;
-    
-    // PERFORMANCE: Cache do termo em lowercase para evitar processamento repetitivo no loop
-    final term = _searchTerm.toLowerCase();
-    return _allUsers.where((user) {
-      return user.name.toLowerCase().contains(term) || 
-             user.email.toLowerCase().contains(term);
-    }).toList();
-  }
-
+  List<User> get users => _searchTerm.isEmpty ? _allUsers : _filteredUsers;
   List<Map<String, dynamic>> get pendingInvites => _pendingInvites;
   bool get isLoading => _isLoading;
   String? get error => _error;
   int get usersCount => users.length;
 
-  void searchUsers(String term) {
-    final newTerm = term.trim();
-    if (_searchTerm == newTerm) return; // Só notifica se mudar
-    _searchTerm = newTerm;
+  /// Limpa todos os dados e encerra as assinaturas (Essencial para logout seguro)
+  void clearData() {
+    _userSubscription?.cancel();
+    _inviteSubscription?.cancel();
+    _userSubscription = null;
+    _inviteSubscription = null;
+    _allUsers = [];
+    _filteredUsers = [];
+    _pendingInvites = [];
+    _currentCompanyId = null;
+    _currentInviteUserId = null;
+    _searchTerm = '';
+    _error = null;
     notifyListeners();
+  }
+
+  void searchUsers(String term) {
+    final newTerm = term.trim().toLowerCase();
+    if (_searchTerm == newTerm) return; 
+    _searchTerm = newTerm;
+    _applyFilter();
+    notifyListeners();
+  }
+
+  void _applyFilter() {
+    if (_searchTerm.isEmpty) {
+      _filteredUsers = [];
+    } else {
+      _filteredUsers = _allUsers.where((user) {
+        return user.name.toLowerCase().contains(_searchTerm) || 
+               user.email.toLowerCase().contains(_searchTerm);
+      }).toList();
+    }
   }
 
   void initCompanyStream(String? companyId) {
@@ -52,7 +71,6 @@ class UserProvider with ChangeNotifier {
       return;
     }
     
-    // PERFORMANCE: Impede que o Stream reinicie se já estivermos na mesma empresa
     if (_currentCompanyId == companyId) return;
 
     _currentCompanyId = companyId;
@@ -62,6 +80,7 @@ class UserProvider with ChangeNotifier {
     _userSubscription = _service.getUsersStream(companyId).listen(
       (userList) {
         _allUsers = userList;
+        _applyFilter();
         _isLoading = false;
         _error = null;
         notifyListeners();
@@ -76,17 +95,13 @@ class UserProvider with ChangeNotifier {
 
   void initInviteStream(String userId) {
     if (userId.isEmpty) return;
-    
-    // PERFORMANCE: Impede que o Stream reinicie se o usuário logado for o mesmo
     if (_currentInviteUserId == userId) return;
     
     _currentInviteUserId = userId;
     _inviteSubscription?.cancel();
     
     _inviteSubscription = _service.getPendingInvites(userId).listen((invites) {
-      // PERFORMANCE: Só notifica se a quantidade de convites mudou 
-      // ou se os dados são diferentes (evita rebuilds infinitos em loops de build)
-      if (_pendingInvites.length != invites.length) {
+      if (_pendingInvites.toString() != invites.toString()) {
         _pendingInvites = invites;
         notifyListeners();
       }
@@ -155,7 +170,7 @@ class UserProvider with ChangeNotifier {
   }
 
   void _setLoading(bool value) {
-    if (_isLoading == value) return; // Evita notificações redundantes
+    if (_isLoading == value) return; 
     _isLoading = value;
     notifyListeners();
   }

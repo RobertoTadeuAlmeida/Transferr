@@ -3,10 +3,15 @@ import 'package:flutter/material.dart';
 import '../models/user.dart';
 import '../repositories/user_repository.dart';
 import '../services/auth_service.dart';
+import 'user_provider.dart';
+import 'excursion_provider.dart'; // Import necessário
 
 class AuthProvider with ChangeNotifier {
   final AuthService _authService;
   StreamSubscription? _authSubscription;
+  
+  UserProvider? _userProvider;
+  ExcursionProvider? _excursionProvider; // Nova referência
 
   User? _currentUser;
   bool _isLoading = false;
@@ -22,6 +27,12 @@ class AuthProvider with ChangeNotifier {
     _init();
   }
 
+  /// Integração para limpar dados de outros providers no logout
+  void update(UserProvider userProvider, ExcursionProvider excursionProvider) {
+    _userProvider = userProvider;
+    _excursionProvider = excursionProvider;
+  }
+
   void _init() {
     _authSubscription = _authService.authStateChanges.listen((fbUser) async {
       if (fbUser != null) {
@@ -33,7 +44,6 @@ class AuthProvider with ChangeNotifier {
     });
   }
 
-  /// Busca os dados mais recentes do usuário no Firestore
   Future<void> refreshUser([String? uid]) async {
     final targetUid = uid ?? _currentUser?.id;
     if (targetUid == null) return;
@@ -58,13 +68,26 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
+  Future<void> createCompany(String companyName) async {
+    if (_currentUser == null) return;
+    _clearError();
+    _setLoading(true);
+    try {
+      await _authService.createOwnCompany(_currentUser!, companyName);
+      await refreshUser();
+    } catch (e) {
+      _errorMessage = e.toString();
+      rethrow;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
   Future<void> switchCompany(String companyId) async {
     if (_currentUser == null) return;
-    
     _setLoading(true);
     try {
       await _authService.switchActiveCompany(_currentUser!.id, companyId);
-      // Após o switch no Firestore, recarregamos para garantir consistência
       await refreshUser();
     } catch (e) {
       _errorMessage = e.toString();
@@ -100,8 +123,16 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
+  /// Logout seguro que limpa assinaturas de TODOS os providers
   Future<void> logout() async {
+    // 1. Limpa os dados dos outros providers ANTES do logout (evita erros de permissão)
+    _userProvider?.clearData();
+    _excursionProvider?.clearData();
+    
+    // 2. Realiza o sign out no Firebase
     await _authService.logout();
+    
+    // 3. Limpa o estado local
     _currentUser = null;
     notifyListeners();
   }
