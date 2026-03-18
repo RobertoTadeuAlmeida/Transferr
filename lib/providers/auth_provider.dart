@@ -25,31 +25,36 @@ class AuthProvider with ChangeNotifier {
   void _init() {
     _authSubscription = _authService.authStateChanges.listen((fbUser) async {
       if (fbUser != null) {
-        final user = await _authService.getUserData(fbUser.uid);
-        if (user != null) {
-          _currentUser = user;
-          // LOGICA DE REPARO: Se o usuário é antigo e não tem o campo 'empresa' gravado corretamente
-          // ou se os nomes de campos mudaram, forçamos um salvamento para atualizar o Firestore.
-          _checkAndRepairUserData(user);
-        }
+        await refreshUser(fbUser.uid);
       } else {
         _currentUser = null;
+        notifyListeners();
       }
-      notifyListeners();
     });
   }
 
-  /// Verifica se os dados no banco estão atualizados com o novo padrão (Multi-tenant)
-  Future<void> _checkAndRepairUserData(User user) async {
-    // Se o usuário logou e o objeto carregado via fromMap (que já tem fallback)
-    // detectou que os dados originais estavam em campos antigos, salvamos no novo padrão.
+  /// Busca os dados mais recentes do usuário no Firestore
+  Future<void> refreshUser([String? uid]) async {
+    final targetUid = uid ?? _currentUser?.id;
+    if (targetUid == null) return;
+
     try {
-      // Simplesmente salvamos o objeto atual de volta. 
-      // O User.toMap() usará 'empresa', 'nome', etc., migrando os dados automaticamente.
-      await _authService.saveUserData(user);
-      debugPrint("🛡️ AUTH_PROVIDER: Dados do usuário sincronizados/migrados com sucesso.");
+      final user = await _authService.getUserData(targetUid);
+      if (user != null) {
+        _currentUser = user;
+        _checkAndRepairUserData(user);
+        notifyListeners();
+      }
     } catch (e) {
-      debugPrint("⚠️ AUTH_PROVIDER (Repair): Erro ao atualizar dados legados: $e");
+      debugPrint("⚠️ AUTH_PROVIDER: Erro ao dar refresh no usuário: $e");
+    }
+  }
+
+  Future<void> _checkAndRepairUserData(User user) async {
+    try {
+      await _authService.saveUserData(user);
+    } catch (e) {
+      debugPrint("⚠️ AUTH_PROVIDER (Repair): Erro ao atualizar dados: $e");
     }
   }
 
@@ -59,8 +64,8 @@ class AuthProvider with ChangeNotifier {
     _setLoading(true);
     try {
       await _authService.switchActiveCompany(_currentUser!.id, companyId);
-      _currentUser = _currentUser!.copyWith(company: companyId);
-      notifyListeners();
+      // Após o switch no Firestore, recarregamos para garantir consistência
+      await refreshUser();
     } catch (e) {
       _errorMessage = e.toString();
       rethrow;

@@ -70,7 +70,10 @@ class _HomePageState extends State<HomePage> {
           ? _buildLoadingSkeleton()
           : RefreshIndicator(
               onRefresh: () async {
-                if (user != null) _refreshData(user.id, user.company);
+                if (user != null) {
+                  await authProvider.refreshUser();
+                  _refreshData(user.id, user.company);
+                }
               },
               child: CustomScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
@@ -203,6 +206,14 @@ class _InviteBanner extends StatelessWidget {
         currentUser: auth.currentUser!,
         companyId: invite['fromCompanyId'],
       );
+
+      // PERFORMANCE & SEGURANÇA: 
+      // Após o convite ser aceito no Firestore, recarregamos o usuário localmente.
+      // Isso atualizará a lista de 'companies' e permitirá o acesso imediato.
+      if (status == 'aceito') {
+        await auth.refreshUser();
+      }
+
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -212,7 +223,11 @@ class _InviteBanner extends StatelessWidget {
         );
       }
     } catch (e) {
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Erro ao responder convite.")));
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Erro ao responder convite."))
+        );
+      }
     }
   }
 }

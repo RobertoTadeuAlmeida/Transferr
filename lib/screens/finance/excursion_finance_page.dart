@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'; // Importante para os formatters
+import 'package:flutter/services.dart'; 
 import 'package:provider/provider.dart';
 import '../../config/theme/app_theme.dart';
 import '../../models/excursion.dart';
-import '../../models/expense.dart'; // Importe o novo model
+import '../../models/expense.dart'; 
 import '../../providers/excursion_provider.dart';
 import '../excursions/add_excursion_page.dart';
 
@@ -17,6 +17,20 @@ class ExcursionFinancePage extends StatefulWidget {
 }
 
 class _ExcursionFinancePageState extends State<ExcursionFinancePage> {
+  late Stream<List<Expense>> _expensesStream;
+  late Stream<double> _revenueStream;
+
+  @override
+  void initState() {
+    super.initState();
+    final excursionProvider = context.read<ExcursionProvider>();
+    
+    // PERFORMANCE: Inicializamos os streams aqui para evitar que sejam 
+    // recriados a cada rebuild do widget pai ou mudanças no StreamBuilder.
+    _expensesStream = excursionProvider.watchExpenses(widget.excursion.id);
+    _revenueStream = excursionProvider.getTotalRevenueStream(widget.excursion.id);
+  }
+
   @override
   Widget build(BuildContext context) {
     final excursionProvider = context.read<ExcursionProvider>();
@@ -24,19 +38,16 @@ class _ExcursionFinancePageState extends State<ExcursionFinancePage> {
     return Scaffold(
       appBar: AppBar(title: const Text('Planilha Financeira')),
       body: StreamBuilder<List<Expense>>(
-        stream: excursionProvider.watchExpenses(widget.excursion.id),
+        stream: _expensesStream,
         builder: (context, snapshotExpenses) {
           return StreamBuilder<double>(
-            stream: excursionProvider.getTotalRevenueStream(
-              widget.excursion.id,
-            ),
+            stream: _revenueStream,
             builder: (context, snapshotRevenue) {
-              if (snapshotExpenses.connectionState == ConnectionState.waiting) {
+              if (snapshotExpenses.connectionState == ConnectionState.waiting && !snapshotExpenses.hasData) {
                 return const Center(child: CircularProgressIndicator());
               }
 
               final despesas = snapshotExpenses.data ?? [];
-              // Cálculo local baseado no valor da despesa
               final totalDespesas = despesas.fold<double>(
                 0,
                 (sum, item) => sum + item.value,
@@ -44,20 +55,13 @@ class _ExcursionFinancePageState extends State<ExcursionFinancePage> {
 
               final faturamentoReal = snapshotRevenue.data ?? 0.0;
 
-              // Usando a lógica de negócio centralizada no Model Excursion (DDD)
               final faturamentoPrevisto = widget.excursion.faturamentoPrevisto;
-              final lucroPrevisto = widget.excursion.calcularLucroPrevisto(
-                totalDespesas,
-              );
-              final lucroAtual = widget.excursion.calcularLucroAtual(
-                faturamentoReal,
-                totalDespesas,
-              );
-              final custoPorAssento = widget.excursion.calcularCustoPorAssento(
-                totalDespesas,
-              );
+              final lucroPrevisto = widget.excursion.calcularLucroPrevisto(totalDespesas);
+              final lucroAtual = widget.excursion.calcularLucroAtual(totalDespesas, faturamentoReal);
+              final custoPorAssento = widget.excursion.calcularCustoPorAssento(totalDespesas);
 
               return CustomScrollView(
+                cacheExtent: 1000, // Otimização para listas longas
                 slivers: [
                   SliverToBoxAdapter(
                     child: Padding(
@@ -90,15 +94,8 @@ class _ExcursionFinancePageState extends State<ExcursionFinancePage> {
                           ),
                           TextButton.icon(
                             onPressed: () => _showAddExpenseModal(context),
-                            icon: const Icon(
-                              Icons.add,
-                              size: 18,
-                              color: AppTheme.successColor,
-                            ),
-                            label: const Text(
-                              "ADICIONAR",
-                              style: TextStyle(color: AppTheme.successColor),
-                            ),
+                            icon: const Icon(Icons.add, size: 18, color: AppTheme.successColor),
+                            label: const Text("ADICIONAR", style: TextStyle(color: AppTheme.successColor)),
                           ),
                         ],
                       ),
@@ -112,12 +109,15 @@ class _ExcursionFinancePageState extends State<ExcursionFinancePage> {
                     )
                   else
                     SliverPadding(
-                      padding: const EdgeInsets.all(16),
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
                       sliver: SliverList(
-                        delegate: SliverChildBuilderDelegate((context, index) {
-                          final item = despesas[index];
-                          return _buildExpenseCard(item);
-                        }, childCount: despesas.length),
+                        delegate: SliverChildBuilderDelegate(
+                          (context, index) => _ExpenseItemTile(
+                            item: despesas[index],
+                            onDelete: () => _confirmDelete(despesas[index].id),
+                          ),
+                          childCount: despesas.length,
+                        ),
                       ),
                     ),
                 ],
@@ -129,12 +129,9 @@ class _ExcursionFinancePageState extends State<ExcursionFinancePage> {
     );
   }
 
-  Widget _buildSummaryGrid(
-    double prev,
-    double desp,
-    double lucroP,
-    double lucroA,
-  ) {
+  // --- MÉTODOS DE UI EXTRAÍDOS PARA EVITAR REBUILDS PESADOS ---
+
+  Widget _buildSummaryGrid(double prev, double desp, double lucroP, double lucroA) {
     return GridView.count(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
@@ -163,19 +160,12 @@ class _ExcursionFinancePageState extends State<ExcursionFinancePage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Text(
-            label,
-            style: const TextStyle(fontSize: 10, color: Colors.white60),
-          ),
+          Text(label, style: const TextStyle(fontSize: 10, color: Colors.white60)),
           const SizedBox(height: 6),
           FittedBox(
             child: Text(
               "R\$ ${value.toStringAsFixed(2)}",
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: color,
-              ),
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: color),
             ),
           ),
         ],
@@ -193,64 +183,19 @@ class _ExcursionFinancePageState extends State<ExcursionFinancePage> {
       ),
       child: Row(
         children: [
-          const Icon(
-            Icons.airline_seat_recline_extra_sharp,
-            color: AppTheme.primaryColor,
-          ),
+          const Icon(Icons.airline_seat_recline_extra_sharp, color: AppTheme.primaryColor),
           const SizedBox(width: 12),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                "VALOR DE CUSTO / ASSENTO",
-                style: TextStyle(fontSize: 10, color: Colors.white70),
-              ),
+              const Text("VALOR DE CUSTO / ASSENTO", style: TextStyle(fontSize: 10, color: Colors.white70)),
               Text(
                 "R\$ ${custo.toStringAsFixed(2)}",
-                style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
+                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
               ),
             ],
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildExpenseCard(Expense item) {
-    // Alterado para o model Expense
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: ListTile(
-        leading: const CircleAvatar(
-          backgroundColor: Colors.white10,
-          child: Icon(Icons.receipt_long, color: Colors.white60, size: 20),
-        ),
-        title: Text(item.description),
-        subtitle: Text(item.category, style: const TextStyle(fontSize: 12)),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              "- R\$ ${item.value.toStringAsFixed(2)}",
-              style: const TextStyle(
-                color: AppTheme.errorColor,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            IconButton(
-              icon: const Icon(
-                Icons.delete_outline,
-                size: 20,
-                color: Colors.white24,
-              ),
-              onPressed: () => _confirmDelete(item.id),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -261,22 +206,13 @@ class _ExcursionFinancePageState extends State<ExcursionFinancePage> {
       builder: (context) => AlertDialog(
         title: const Text("Excluir despesa?"),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Cancelar"),
-          ),
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancelar")),
           TextButton(
             onPressed: () {
-              context.read<ExcursionProvider>().deleteExpense(
-                widget.excursion.id,
-                expenseId,
-              );
+              context.read<ExcursionProvider>().deleteExpense(widget.excursion.id, expenseId);
               Navigator.pop(context);
             },
-            child: const Text(
-              "Excluir",
-              style: TextStyle(color: AppTheme.errorColor),
-            ),
+            child: const Text("Excluir", style: TextStyle(color: AppTheme.errorColor)),
           ),
         ],
       ),
@@ -292,29 +228,18 @@ class _ExcursionFinancePageState extends State<ExcursionFinancePage> {
       context: context,
       isScrollControlled: true,
       backgroundColor: AppTheme.cardColor,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (context) => Padding(
         padding: EdgeInsets.only(
           bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-          left: 20,
-          right: 20,
-          top: 20,
+          left: 20, right: 20, top: 20,
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Center(
-              child: Text(
-                "Nova Despesa",
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-            ),
+            const Center(child: Text("Nova Despesa", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
             const SizedBox(height: 20),
-
-            // Descrição com capitalização automática
             TextField(
               controller: descCtrl,
               textCapitalization: TextCapitalization.sentences,
@@ -324,54 +249,29 @@ class _ExcursionFinancePageState extends State<ExcursionFinancePage> {
               ),
             ),
             const SizedBox(height: 16),
-
-            // FILTROS DE VALOR: Teclado numérico e bloqueio de caracteres
             TextField(
               controller: valorCtrl,
               keyboardType: TextInputType.number,
-              inputFormatters: [
-                FilteringTextInputFormatter.digitsOnly,
-                CurrencyInputFormatter(),
-                // MESMO FILTRO DA TELA DE CADASTRO
-              ],
-              decoration: const InputDecoration(
-                labelText: "Valor da Despesa",
-                prefixIcon: Icon(Icons.attach_money),
-              ),
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly, CurrencyInputFormatter()],
+              decoration: const InputDecoration(labelText: "Valor da Despesa", prefixIcon: Icon(Icons.attach_money)),
             ),
             const SizedBox(height: 16),
-
             DropdownButtonFormField<String>(
-              initialValue: categoria,
+              value: categoria,
               dropdownColor: AppTheme.cardColor,
-              items: [
-                'Transporte',
-                'Alimentação',
-                'Hospedagem',
-                'Consumíveis',
-                'Outros',
-              ].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+              items: ['Transporte', 'Alimentação', 'Hospedagem', 'Consumíveis', 'Outros']
+                  .map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
               onChanged: (v) => categoria = v!,
-              decoration: const InputDecoration(
-                labelText: "Categoria",
-                prefixIcon: Icon(Icons.category_outlined),
-              ),
+              decoration: const InputDecoration(labelText: "Categoria", prefixIcon: Icon(Icons.category_outlined)),
             ),
             const SizedBox(height: 30),
-
             SizedBox(
               width: double.infinity,
               height: 50,
               child: ElevatedButton(
                 onPressed: () {
-                  // Converte vírgula em ponto para o parse funcionar
-                  String plainValue = valorCtrl.text
-                      .replaceAll('R\$', '')
-                      .replaceAll('.', '')
-                      .replaceAll(',', '.')
-                      .trim();
+                  String plainValue = valorCtrl.text.replaceAll('R\$', '').replaceAll('.', '').replaceAll(',', '.').trim();
                   final valor = double.tryParse(plainValue) ?? 0.0;
-
                   if (descCtrl.text.trim().isNotEmpty && valor > 0) {
                     context.read<ExcursionProvider>().addExpense(
                       excursionId: widget.excursion.id,
@@ -380,18 +280,46 @@ class _ExcursionFinancePageState extends State<ExcursionFinancePage> {
                       category: categoria,
                     );
                     Navigator.pop(context);
-                  } else {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text(
-                          "Preencha a descrição e um valor válido.",
-                        ),
-                      ),
-                    );
                   }
                 },
                 child: const Text("SALVAR DESPESA"),
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Widget extraído para performance na lista de despesas
+class _ExpenseItemTile extends StatelessWidget {
+  final Expense item;
+  final VoidCallback onDelete;
+
+  const _ExpenseItemTile({required this.item, required this.onDelete});
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: ListTile(
+        leading: const CircleAvatar(
+          backgroundColor: Colors.white10,
+          child: Icon(Icons.receipt_long, color: Colors.white60, size: 20),
+        ),
+        title: Text(item.description),
+        subtitle: Text(item.category, style: const TextStyle(fontSize: 12)),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              "- R\$ ${item.value.toStringAsFixed(2)}",
+              style: const TextStyle(color: AppTheme.errorColor, fontWeight: FontWeight.bold),
+            ),
+            IconButton(
+              icon: const Icon(Icons.delete_outline, size: 20, color: Colors.white24),
+              onPressed: onDelete,
             ),
           ],
         ),

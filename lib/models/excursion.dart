@@ -12,11 +12,12 @@ class Excursion {
   final int totalSeats;
   final int reservedSeats;
   final int paidSeats;
+  final double totalReceived; 
   final String slug;
   final ExcursionStatus status;
   final String idResponsible;
-  final String empresa; // NOVO: Vínculo Multi-tenant
-  final bool isDeleted; // Soft Delete
+  final String empresa; 
+  final bool isDeleted; 
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -31,10 +32,11 @@ class Excursion {
     required this.totalSeats,
     this.reservedSeats = 0,
     this.paidSeats = 0,
+    this.totalReceived = 0.0,
     required this.slug,
     this.status = ExcursionStatus.programada,
     required this.idResponsible,
-    required this.empresa, // Campo obrigatório
+    required this.empresa, 
     this.isDeleted = false,
     this.createdAt,
     this.updatedAt,
@@ -44,22 +46,34 @@ class Excursion {
   // ----------- LÓGICA DE NEGÓCIO (CÁLCULOS LOCAIS / DDD) -----------
   // ===========================================================================
 
-  bool get isFull => reservedSeats > totalSeats;
-  double get faturamentoPrevisto => totalSeats * basePrice;
+  bool get isFull => reservedSeats >= totalSeats;
+  
+  // Nomes novos (SaaS/Financeiro Real)
+  double get faturamentoPrevistoIdeal => totalSeats * basePrice;
   double get faturamentoEstimadoAtual => reservedSeats * basePrice;
+  double get aReceber => faturamentoEstimadoAtual - totalReceived;
+
+  // Aliases para compatibilidade com telas antigas (Evita quebra)
+  double get faturamentoPrevisto => faturamentoPrevistoIdeal;
+
+  double calcularLucroPrevisto(double totalDespesas) {
+    return faturamentoPrevistoIdeal - totalDespesas;
+  }
+
+  /// Calcula o lucro baseado no que realmente entrou (ou opcionalmente no faturamento real passado)
+  double calcularLucroAtual(double totalDespesas, [double? faturamentoInformado]) {
+    final faturamentoBase = faturamentoInformado ?? totalReceived;
+    return faturamentoBase - totalDespesas;
+  }
 
   double calcularCustoPorAssento(double totalDespesas) {
     if (totalSeats <= 0) return 0.0;
     return totalDespesas / totalSeats;
   }
 
-  double calcularLucroPrevisto(double totalDespesas) {
-    return faturamentoPrevisto - totalDespesas;
-  }
-
-  double calcularLucroAtual(double faturamentoReal, double totalDespesas) {
-    return faturamentoReal - totalDespesas;
-  }
+  double get progressoFinanceiro => faturamentoEstimadoAtual > 0 
+      ? (totalReceived / faturamentoEstimadoAtual) 
+      : 0;
 
   // ===========================================================================
   // ----------- CONVERSÃO E PERSISTÊNCIA (FIRESTORE) -----------
@@ -75,10 +89,12 @@ class Excursion {
       'precoBase': basePrice,
       'assentosTotais': totalSeats,
       'assentosReservados': reservedSeats,
+      'assentosPagos': paidSeats,
+      'totalRecebido': totalReceived,
       'slug': slug,
       'status': _statusToString(status),
       'idResponsavel': idResponsible,
-      'empresa': empresa, // Salvando no Firestore
+      'empresa': empresa,
       'excluido': isDeleted,
       'criadoEm': createdAt ?? FieldValue.serverTimestamp(),
       'atualizadoEm': FieldValue.serverTimestamp(),
@@ -97,9 +113,10 @@ class Excursion {
       totalSeats: data['assentosTotais'] as int? ?? 0,
       reservedSeats: data['assentosReservados'] as int? ?? 0,
       paidSeats: data['assentosPagos'] as int? ?? 0,
+      totalReceived: (data['totalRecebido'] as num?)?.toDouble() ?? 0.0,
       slug: data['slug'] ?? '',
       idResponsible: data['idResponsavel'] ?? '',
-      empresa: data['empresa'] ?? '', // Lendo do Firestore
+      empresa: data['empresa'] ?? '', 
       isDeleted: data['excluido'] ?? false,
       status: _parseStatus(data['status']),
       createdAt: (data['criadoEm'] as Timestamp?)?.toDate(),
@@ -137,10 +154,11 @@ class Excursion {
     int? totalSeats,
     int? reservedSeats,
     int? paidSeats,
+    double? totalReceived,
     String? slug,
     ExcursionStatus? status,
     String? idResponsible,
-    String? empresa, // NOVO no copyWith
+    String? empresa, 
     bool? isDeleted,
   }) {
     return Excursion(
@@ -154,6 +172,7 @@ class Excursion {
       totalSeats: totalSeats ?? this.totalSeats,
       reservedSeats: reservedSeats ?? this.reservedSeats,
       paidSeats: paidSeats ?? this.paidSeats,
+      totalReceived: totalReceived ?? this.totalReceived,
       slug: slug ?? this.slug,
       status: status ?? this.status,
       idResponsible: idResponsible ?? this.idResponsible,

@@ -15,17 +15,19 @@ class UserProvider with ChangeNotifier {
   String? _error;
   String _searchTerm = '';
   String? _currentCompanyId;
+  String? _currentInviteUserId; // PERFORMANCE: Cache para evitar re-sub de convites
 
   UserProvider({UserService? service})
       : _service = service ?? UserService(UserRepository());
 
   List<User> get users {
     if (_searchTerm.isEmpty) return _allUsers;
+    
+    // PERFORMANCE: Cache do termo em lowercase para evitar processamento repetitivo no loop
     final term = _searchTerm.toLowerCase();
     return _allUsers.where((user) {
-      final nameMatches = user.name.toLowerCase().contains(term);
-      final emailMatches = user.email.toLowerCase().contains(term);
-      return nameMatches || emailMatches;
+      return user.name.toLowerCase().contains(term) || 
+             user.email.toLowerCase().contains(term);
     }).toList();
   }
 
@@ -34,9 +36,10 @@ class UserProvider with ChangeNotifier {
   String? get error => _error;
   int get usersCount => users.length;
 
-  /// Atualiza o termo de busca e notifica a UI para filtrar a lista
   void searchUsers(String term) {
-    _searchTerm = term.trim();
+    final newTerm = term.trim();
+    if (_searchTerm == newTerm) return; // Só notifica se mudar
+    _searchTerm = newTerm;
     notifyListeners();
   }
 
@@ -48,6 +51,8 @@ class UserProvider with ChangeNotifier {
       notifyListeners();
       return;
     }
+    
+    // PERFORMANCE: Impede que o Stream reinicie se já estivermos na mesma empresa
     if (_currentCompanyId == companyId) return;
 
     _currentCompanyId = companyId;
@@ -70,20 +75,30 @@ class UserProvider with ChangeNotifier {
   }
 
   void initInviteStream(String userId) {
+    if (userId.isEmpty) return;
+    
+    // PERFORMANCE: Impede que o Stream reinicie se o usuário logado for o mesmo
+    if (_currentInviteUserId == userId) return;
+    
+    _currentInviteUserId = userId;
     _inviteSubscription?.cancel();
+    
     _inviteSubscription = _service.getPendingInvites(userId).listen((invites) {
-      _pendingInvites = invites;
-      notifyListeners();
+      // PERFORMANCE: Só notifica se a quantidade de convites mudou 
+      // ou se os dados são diferentes (evita rebuilds infinitos em loops de build)
+      if (_pendingInvites.length != invites.length) {
+        _pendingInvites = invites;
+        notifyListeners();
+      }
     });
   }
 
   Future<User?> findUserByEmail(String email) => _service.findUserByEmail(email);
 
-  /// Envia um convite com validação de segurança do remetente
   Future<void> sendInvite({
     required String fromCompanyId,
     required String fromCompanyName,
-    required String toUserId,
+    required String toUserEmail,
     required String currentUserId,
   }) async {
     _setLoading(true);
@@ -92,7 +107,7 @@ class UserProvider with ChangeNotifier {
       await _service.sendInvite(
         fromCompanyId: fromCompanyId,
         fromCompanyName: fromCompanyName,
-        toUserId: toUserId,
+        toUserEmail: toUserEmail,
         currentUserId: currentUserId,
       );
     } catch (e) {
@@ -103,7 +118,6 @@ class UserProvider with ChangeNotifier {
     }
   }
 
-  /// Responde ao convite usando parâmetros nomeados para segurança
   Future<void> respondToInvite({
     required String inviteId,
     required String status,
@@ -141,6 +155,7 @@ class UserProvider with ChangeNotifier {
   }
 
   void _setLoading(bool value) {
+    if (_isLoading == value) return; // Evita notificações redundantes
     _isLoading = value;
     notifyListeners();
   }

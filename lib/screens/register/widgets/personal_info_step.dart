@@ -28,6 +28,8 @@ class _PersonalInfoStepState extends State<PersonalInfoStep> {
 
   @override
   Widget build(BuildContext context) {
+    final bool isAdmin = widget.selectedProfile == 'ADMIN';
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Form(
@@ -35,10 +37,16 @@ class _PersonalInfoStepState extends State<PersonalInfoStep> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Center(child: Icon(Icons.business_center_outlined, size: 64, color: Colors.blue)),
+            Center(
+              child: Icon(
+                isAdmin ? Icons.business_center_outlined : Icons.person_search_outlined, 
+                size: 64, 
+                color: Colors.blue
+              )
+            ),
             const SizedBox(height: 24),
             
-            const Text("Informações de Acesso", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            const Text("Tipo de Cadastro", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
             const SizedBox(height: 16),
             
             DropdownButtonFormField<String>(
@@ -49,29 +57,43 @@ class _PersonalInfoStepState extends State<PersonalInfoStep> {
                 border: OutlineInputBorder(),
               ),
               items: const [
-                DropdownMenuItem(value: 'ADMIN', child: Text("Dono de Agência (Admin)")),
-                DropdownMenuItem(value: 'AGENTE', child: Text("Agente / Guia Independente")),
+                DropdownMenuItem(value: 'ADMIN', child: Text("Dono de Agência (Organizador)")),
+                DropdownMenuItem(value: 'AGENTE', child: Text("Agente / Guia / Colaborador")),
               ],
-              onChanged: widget.onProfileChanged,
+              onChanged: (v) {
+                widget.onProfileChanged(v);
+                // Reseta o nome da empresa se mudar para Agente
+                if (v == 'AGENTE') {
+                  widget.controllers['company']?.clear();
+                }
+              },
             ),
             
             const SizedBox(height: 16),
+            
+            // O nome da empresa agora é opcional para Agentes (fluxo SaaS)
             TextFormField(
               controller: widget.controllers['company'],
-              decoration: const InputDecoration(
-                labelText: 'Nome da Empresa / Nome Fantasia',
-                prefixIcon: Icon(Icons.storefront_outlined),
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: isAdmin ? 'Nome da sua Empresa' : 'Nome Profissional (Opcional)',
+                hintText: isAdmin ? 'Ex: Agência de Viagens Sol' : 'Ex: Guia João Santos',
+                prefixIcon: const Icon(Icons.storefront_outlined),
+                border: const OutlineInputBorder(),
+                helperText: isAdmin ? 'Sua empresa será criada com este nome.' : 'Use um nome que facilite ser achado por agências.',
               ),
               textCapitalization: TextCapitalization.words,
-              validator: (v) => v!.isEmpty ? 'Informe o nome da empresa' : null,
+              validator: (v) {
+                if (isAdmin && (v == null || v.isEmpty)) {
+                  return 'Como Organizador, você deve informar o nome da sua empresa.';
+                }
+                return null;
+              },
             ),
 
-            const SizedBox(height: 24),
-            const Text("Documentação", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            const SizedBox(height: 32),
+            const Text("Documentação Identificadora", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
             const SizedBox(height: 12),
             
-            // Seletor de CPF / CNPJ
             SegmentedButton<bool>(
               segments: const [
                 ButtonSegment(value: false, label: Text('CPF'), icon: Icon(Icons.person_outline)),
@@ -92,21 +114,21 @@ class _PersonalInfoStepState extends State<PersonalInfoStep> {
               inputFormatters: [_isCnpj ? _maskCnpj : _maskCpf],
               keyboardType: TextInputType.number,
               decoration: InputDecoration(
-                labelText: _isCnpj ? 'CNPJ da Empresa' : 'CPF do Responsável',
+                labelText: _isCnpj ? 'CNPJ' : 'CPF',
                 prefixIcon: const Icon(Icons.badge_outlined),
                 border: const OutlineInputBorder(),
                 hintText: _isCnpj ? "00.000.000/0000-00" : "000.000.000-00",
               ),
               validator: (v) {
-                if (v == null || v.isEmpty) return 'Obrigatório';
+                if (v == null || v.isEmpty) return 'Obrigatório para segurança dos dados.';
                 if (_isCnpj && v.length < 18) return 'CNPJ incompleto';
                 if (!_isCnpj && v.length < 14) return 'CPF incompleto';
                 return null;
               },
             ),
 
-            const SizedBox(height: 24),
-            const Text("Contato Pessoal", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            const SizedBox(height: 32),
+            const Text("Informações de Contato", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
             const SizedBox(height: 12),
             
             TextFormField(

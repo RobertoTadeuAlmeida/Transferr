@@ -13,7 +13,6 @@ class AuthService {
   Future<User?> getUserData(String uid) => _userRepo.getUserData(uid);
   Future<void> logout() => _userRepo.signOut();
 
-  /// Salva ou atualiza os dados completos do usuário no Firestore
   Future<void> saveUserData(User user) => _userRepo.saveUserData(user);
 
   Future<void> sendPasswordReset(String email) async {
@@ -24,7 +23,6 @@ class AuthService {
     }
   }
 
-  /// Troca a empresa ativa e garante que o nome da nova empresa seja buscado
   Future<void> switchActiveCompany(String uid, String newCompanyId) async {
     try {
       String newName = "Sem Empresa";
@@ -42,28 +40,24 @@ class AuthService {
   }
 
   Future<void> register(User user, String password) async {
-    // REGRA: Usuários comuns precisam estar vinculados a uma empresa no cadastro
-    if (!user.isAdmin && user.company.isEmpty) {
-      throw Exception("Obrigatório vincular-se a uma empresa para realizar o cadastro.");
-    }
-
     fb_auth.UserCredential? userCredential;
     try {
       userCredential = await _userRepo.signUp(user.email, password);
       final String uid = userCredential.user!.uid;
       
-      // ADMIN: Dono da empresa (ID = seu UID). Agente: Usa o ID fornecido.
-      final String companyId = user.isAdmin ? uid : user.company;
-      
-      // Se for ADMIN, o texto digitado no campo empresa é o nome fantasia.
-      // Se for Agente, ele entra como "Aguardando Vínculo" até carregar o nome real.
+      // LOGICA SAAS:
+      // Se for ADMIN: Ele é o dono da empresa. O ID da empresa é o seu UID.
+      // Se for AGENTE: Ele entra sem empresa (vazio), aguardando convite.
+      final String companyId = user.isAdmin ? uid : "";
       final String companyName = user.isAdmin ? user.company : "Aguardando Vínculo";
+      final List<String> companies = user.isAdmin ? [uid] : [];
 
       final userWithId = user.copyWith(
         id: uid,
         company: companyId,
         companyName: companyName,
-        companies: [companyId], 
+        companies: companies,
+        profile: user.profile, // Mantém o perfil escolhido (ADMIN ou AGENTE)
       );
 
       await _userRepo.saveUserData(userWithId);

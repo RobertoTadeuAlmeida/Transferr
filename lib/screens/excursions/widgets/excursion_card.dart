@@ -32,9 +32,14 @@ class ExcursionCard extends StatelessWidget {
     final bool isCompleted = excursion.status == ExcursionStatus.concluida;
 
     // Cálculos de Progresso
-    final int total = excursion.totalSeats > 0 ? excursion.totalSeats : 1;
-    final double percentOcupado = (excursion.reservedSeats / total).clamp(0.0, 1.0);
-    final double percentPagos = (excursion.paidSeats / total).clamp(0.0, 1.0);
+    final int totalVagas = excursion.totalSeats > 0 ? excursion.totalSeats : 1;
+    final double percentOcupado = (excursion.reservedSeats / totalVagas).clamp(0.0, 1.0);
+    
+    // Novo cálculo baseado no dinheiro real que entrou vs o que deveria entrar das reservas atuais
+    final double faturamentoEsperadoDasReservas = excursion.faturamentoEstimadoAtual;
+    final double percentFinanceiro = faturamentoEsperadoDasReservas > 0 
+        ? (excursion.totalReceived / faturamentoEsperadoDasReservas).clamp(0.0, 1.0)
+        : 0.0;
 
     // Configuração de Status
     final (statusColor, statusIcon, statusLabel) = _getStatusConfig();
@@ -79,41 +84,47 @@ class ExcursionCard extends StatelessWidget {
                       ),
                     ),
                   ),
-                  Icon(statusIcon, color: statusColor, size: 22),
+                  _buildStatusBadge(statusLabel, statusColor, statusIcon),
                 ],
               ),
               const SizedBox(height: 12),
 
               _buildInfoRow(
+                Icons.location_on_outlined,
+                excursion.idMainDestination,
+                theme,
+              ),
+              const SizedBox(height: 4),
+              _buildInfoRow(
                 Icons.calendar_today_outlined,
                 DateFormat(
-                  "'Partida:' dd/MM/yyyy 'às' HH:mm",
+                  "dd/MM/yyyy 'às' HH:mm",
                 ).format(excursion.startDate),
                 theme,
               ),
 
-              const SizedBox(height: 16),
+              const SizedBox(height: 20),
 
               // Barras de Progresso
               _buildProgressBar(
-                label: "Ocupação (Reservas)",
+                label: "Ocupação do Veículo",
                 percent: percentOcupado,
                 color: AppTheme.primaryColor,
-                count: "${excursion.reservedSeats}/$total",
+                count: "${excursion.reservedSeats}/$totalVagas vagas",
                 textTheme: textTheme,
               ),
               const SizedBox(height: 12),
               _buildProgressBar(
-                label: "Pagamentos (Completos)",
-                percent: percentPagos,
+                label: "Saúde Financeira (Caixa)",
+                percent: percentFinanceiro,
                 color: AppTheme.successColor,
-                count: "${excursion.paidSeats}/$total",
+                count: currencyFormat.format(excursion.totalReceived),
                 textTheme: textTheme,
               ),
 
               const Divider(height: 32, color: Colors.white10),
 
-              // Rodapé Financeiro Dinâmico
+              // Rodapé Financeiro
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -121,46 +132,37 @@ class ExcursionCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        isCompleted ? 'LUCRO BRUTO FINAL' : 'FATURAMENTO PREVISTO',
+                        'A RECEBER (INADIMPLÊNCIA)',
                         style: textTheme.labelSmall?.copyWith(
-                          color: isCompleted ? AppTheme.successColor : Colors.grey,
-                          fontSize: 9,
-                          fontWeight: isCompleted ? FontWeight.bold : FontWeight.normal,
+                          color: Colors.grey,
+                          fontSize: 8,
+                          letterSpacing: 0.5,
                         ),
                       ),
                       Text(
-                        // Se concluída, mostra o faturamento real que entrou. 
-                        // Se não, mostra o que é previsto se vender tudo.
-                        currencyFormat.format(isCompleted ? (excursion.paidSeats * excursion.basePrice) : excursion.faturamentoPrevisto),
+                        currencyFormat.format(excursion.aReceber),
                         style: textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.bold,
-                          color: isCompleted ? AppTheme.successColor : AppTheme.primaryColor,
+                          color: excursion.aReceber > 0 ? Colors.amber : Colors.white54,
                         ),
                       ),
                     ],
                   ),
-                  Row(
-                    children: [
-                      IconButton(
-                        onPressed: () => Navigator.pushNamed(
-                          context,
-                          '/excursion-finance',
-                          arguments: excursion,
-                        ),
-                        icon: const Icon(Icons.analytics_outlined),
-                        color: AppTheme.successColor,
-                        style: IconButton.styleFrom(
-                          backgroundColor: AppTheme.successColor.withValues(
-                            alpha: 0.1,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      _buildStatusBadge(statusLabel, statusColor),
-                    ],
+                  ElevatedButton.icon(
+                    onPressed: () => Navigator.pushNamed(
+                      context,
+                      '/excursion-finance',
+                      arguments: excursion,
+                    ),
+                    icon: const Icon(Icons.analytics_outlined, size: 16),
+                    label: const Text("FINANCEIRO", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.successColor.withValues(alpha: 0.1),
+                      foregroundColor: AppTheme.successColor,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
                   ),
                 ],
               ),
@@ -188,7 +190,7 @@ class ExcursionCard extends StatelessWidget {
             Text(
               label,
               style: textTheme.labelSmall?.copyWith(
-                color: Colors.white54,
+                color: Colors.white38,
                 fontSize: 10,
               ),
             ),
@@ -228,21 +230,28 @@ class ExcursionCard extends StatelessWidget {
     }
   }
 
-  Widget _buildStatusBadge(String label, Color color) {
+  Widget _buildStatusBadge(String label, Color color, IconData icon) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: color,
-          fontSize: 8,
-          fontWeight: FontWeight.bold,
-        ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: color, size: 12),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              color: color,
+              fontSize: 9,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -258,14 +267,14 @@ class ExcursionCard extends StatelessWidget {
     );
     return Row(
       children: [
-        Icon(icon, size: 16, color: color ?? defaultColor),
+        Icon(icon, size: 14, color: color ?? defaultColor),
         const SizedBox(width: 8),
         Expanded(
           child: Text(
             text,
             style: theme.textTheme.bodyMedium?.copyWith(
               color: color ?? defaultColor,
-              fontSize: 13,
+              fontSize: 12,
             ),
             overflow: TextOverflow.ellipsis,
           ),

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/user_provider.dart';
 import '../../providers/auth_provider.dart';
-import '../../models/user.dart';
 
 class AddUserPage extends StatefulWidget {
   const AddUserPage({super.key});
@@ -14,56 +13,41 @@ class AddUserPage extends StatefulWidget {
 class _AddUserPageState extends State<AddUserPage> {
   final TextEditingController _emailController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
-  User? _foundUser;
-  bool _isSearching = false;
-
-  Future<void> _searchUser() async {
-    if (!_formKey.currentState!.validate()) return;
-
-    setState(() {
-      _isSearching = true;
-      _foundUser = null;
-    });
-
-    final provider = context.read<UserProvider>();
-    
-    try {
-      final user = await provider.findUserByEmail(_emailController.text.trim());
-      
-      setState(() {
-        _foundUser = user;
-        _isSearching = false;
-      });
-
-      if (user == null && mounted) {
-        _showSnackBar("Nenhum usuário encontrado com este e-mail.", isError: true);
-      }
-    } catch (e) {
-      setState(() => _isSearching = false);
-      _showSnackBar("Erro ao buscar usuário. Verifique sua conexão.", isError: true);
-    }
-  }
+  bool _isLoading = false;
 
   Future<void> _sendInvite() async {
-    if (_foundUser == null) return;
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() => _isLoading = true);
 
     final auth = context.read<AuthProvider>();
-    final provider = context.read<UserProvider>();
+    final userProvider = context.read<UserProvider>();
 
     try {
-      await provider.sendInvite(
+      // REGRA: O convite agora é feito DIRETAMENTE pelo e-mail.
+      // O Service se encarrega de buscar o UID do usuário destino.
+      await userProvider.sendInvite(
         fromCompanyId: auth.currentUser!.company,
-        fromCompanyName: auth.currentUser!.name, 
-        toUserId: _foundUser!.id,
+        fromCompanyName: auth.currentUser!.companyName.isNotEmpty 
+            ? auth.currentUser!.companyName 
+            : "Sua Empresa", 
+        toUserEmail: _emailController.text.trim(),
         currentUserId: auth.currentUser!.id,
       );
 
       if (mounted) {
-        _showSnackBar("Convite enviado com sucesso! Aguarde o aceite do operador.");
+        _showSnackBar("Convite enviado com sucesso para ${_emailController.text.trim()}!");
         Navigator.pop(context);
       }
     } catch (e) {
-      if (mounted) _showSnackBar(e.toString().replaceFirst('Exception: ', ''), isError: true);
+      if (mounted) {
+        _showSnackBar(
+          e.toString().replaceFirst('Exception: ', ''), 
+          isError: true
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -71,7 +55,7 @@ class _AddUserPageState extends State<AddUserPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: isError ? Colors.red : Colors.green,
+        backgroundColor: isError ? Colors.redAccent : Colors.green,
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -79,79 +63,70 @@ class _AddUserPageState extends State<AddUserPage> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final userProvider = context.watch<UserProvider>();
-
     return Scaffold(
-      appBar: AppBar(title: const Text('Convidar Operador')),
-      body: Padding(
+      appBar: AppBar(
+        title: const Text('Convidar Operador'),
+        elevation: 0,
+      ),
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(24.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text(
-              "Envie um convite para que um colaborador se junte à sua equipe.",
-              style: TextStyle(color: Colors.white70, fontSize: 14),
-            ),
-            const SizedBox(height: 24),
-            Form(
-              key: _formKey,
-              child: TextFormField(
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Icon(Icons.person_add_alt_1_outlined, size: 80, color: Colors.blue),
+              const SizedBox(height: 24),
+              const Text(
+                "ADICIONAR À EQUIPE",
+                textAlign: TextAlign.center,
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                "Informe o e-mail do operador que você deseja convidar. Ele deve ter uma conta ativa no Transferr.",
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white60, fontSize: 14),
+              ),
+              const SizedBox(height: 40),
+              TextFormField(
                 controller: _emailController,
                 keyboardType: TextInputType.emailAddress,
+                style: const TextStyle(fontSize: 16),
                 decoration: InputDecoration(
                   labelText: 'E-mail do Operador',
+                  hintText: 'exemplo@email.com',
                   prefixIcon: const Icon(Icons.email_outlined),
-                  border: const OutlineInputBorder(),
-                  suffixIcon: IconButton(
-                    icon: const Icon(Icons.search),
-                    onPressed: _isSearching ? null : _searchUser,
-                  ),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  filled: true,
+                  fillColor: Colors.white.withValues(alpha: 0.05),
                 ),
-                validator: (v) => v!.isEmpty || !v.contains('@') ? 'E-mail inválido' : null,
-                onFieldSubmitted: (_) => _searchUser(),
+                validator: (v) {
+                  if (v == null || v.isEmpty) return 'Informe o e-mail';
+                  if (!v.contains('@')) return 'E-mail inválido';
+                  return null;
+                },
               ),
-            ),
-            const SizedBox(height: 32),
-            if (_isSearching)
-              const Center(child: CircularProgressIndicator())
-            else if (_foundUser != null)
-              _buildUserFoundCard(theme, userProvider.isLoading)
-            else
+              const SizedBox(height: 40),
+              SizedBox(
+                height: 55,
+                child: ElevatedButton(
+                  onPressed: _isLoading ? null : _sendInvite,
+                  style: ElevatedButton.styleFrom(
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: _isLoading 
+                    ? const CircularProgressIndicator(color: Colors.white) 
+                    : const Text(
+                        "ENVIAR CONVITE",
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                      ),
+                ),
+              ),
+              const SizedBox(height: 24),
               _buildInfoSection(),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildUserFoundCard(ThemeData theme, bool isLoading) {
-    return Card(
-      color: theme.primaryColor.withValues(alpha: 0.1),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: theme.primaryColor.withValues(alpha: 0.3)),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          children: [
-            const CircleAvatar(radius: 30, child: Icon(Icons.person, size: 30)),
-            const SizedBox(height: 16),
-            Text(_foundUser!.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-            Text(_foundUser!.email, style: const TextStyle(color: Colors.white60)),
-            const SizedBox(height: 24),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: isLoading ? null : _sendInvite,
-                icon: isLoading 
-                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) 
-                  : const Icon(Icons.send_rounded),
-                label: Text(isLoading ? "ENVIANDO..." : "ENVIAR CONVITE DE EQUIPE"),
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -167,12 +142,12 @@ class _AddUserPageState extends State<AddUserPage> {
       ),
       child: const Row(
         children: [
-          Icon(Icons.info_outline, color: Colors.blue, size: 24),
+          Icon(Icons.shield_outlined, color: Colors.blue, size: 24),
           const SizedBox(width: 16),
           Expanded(
             child: Text(
-              "Por segurança, o operador deve aceitar seu convite para que os dados da empresa sejam compartilhados.",
-              style: TextStyle(fontSize: 13, color: Colors.blue),
+              "Por segurança, o operador deve aceitar seu convite para visualizar os dados da empresa.",
+              style: TextStyle(fontSize: 12, color: Colors.blue),
             ),
           ),
         ],

@@ -1,8 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:transferr/utils/double_extensions.dart';
 import 'package:transferr/widgets/app_drawer.dart';
+import '../../providers/auth_provider.dart';
 
 import '../../models/enums.dart';
 import '../../models/excursion.dart';
@@ -29,7 +31,8 @@ class _FinancePageState extends State<FinancePage> {
   @override
   void initState() {
     super.initState();
-    _loadFinanceData();
+    // Inicia o carregamento após o primeiro frame para ter acesso ao Context/Provider
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadFinanceData());
   }
 
   /// Carrega e processa os dados usando a lógica de negócio do Model (DDD)
@@ -38,8 +41,19 @@ class _FinancePageState extends State<FinancePage> {
     setState(() => _isLoading = true);
 
     try {
-      // Busca na coleção correta 'excursoes' definida no Repository
-      Query query = FirebaseFirestore.instance.collection('excursoes');
+      // OBTÉM A EMPRESA ATIVA (MULTI-TENANT)
+      final authProvider = context.read<AuthProvider>();
+      final companyId = authProvider.currentUser?.company ?? '';
+
+      if (companyId.isEmpty) {
+        throw Exception("Empresa ativa não identificada.");
+      }
+
+      // Busca na coleção correta 'excursoes' e filtra pela empresa
+      Query query = FirebaseFirestore.instance
+          .collection('excursoes')
+          .where('empresa', isEqualTo: companyId)
+          .where('excluido', isEqualTo: false); // Filtro de soft delete
 
       // Aplica filtros de Status
       if (_selectedFilter == FinanceFilter.concluido) {
@@ -81,7 +95,10 @@ class _FinancePageState extends State<FinancePage> {
       if (mounted) {
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erro ao carregar dados: $e')),
+          SnackBar(
+            content: Text('Erro: ${e.toString().replaceFirst('Exception: ', '')}'),
+            backgroundColor: Colors.redAccent,
+          ),
         );
       }
     }
@@ -95,7 +112,7 @@ class _FinancePageState extends State<FinancePage> {
     return Scaffold(
       drawer: const AppDrawer(),
       appBar: AppBar(
-        title: const Text('Painel Financeiro'),
+        title: const Text('Painel Financeiro Geral'),
         elevation: 0,
       ),
       body: RefreshIndicator(
@@ -148,7 +165,7 @@ class _FinancePageState extends State<FinancePage> {
               color: theme.primaryColor,
             ),
             const SizedBox(height: 24),
-            _buildFooterInfo('Baseado em $_totalExcursions excursões filtradas.'),
+            _buildFooterInfo('Baseado em $_totalExcursions excursões da sua empresa.'),
           ],
         ),
       ),
