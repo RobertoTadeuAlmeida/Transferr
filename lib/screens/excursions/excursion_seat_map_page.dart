@@ -37,29 +37,24 @@ class _ExcursionSeatMapPageState extends State<ExcursionSeatMapPage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final passengerProvider = context.read<PassengerProvider>();
-    
-    // Obtém a empresa ativa do AuthProvider para o filtro Multi-tenant
     final authProvider = context.watch<AuthProvider>();
     final companyId = authProvider.currentUser?.company ?? '';
 
     return StreamBuilder<List<Passenger>>(
-      // CORREÇÃO: Passando companyId para o watchPassengers
       stream: passengerProvider.watchPassengers(widget.excursionId, companyId),
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
+        if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
+          return const Scaffold(body: Center(child: CircularProgressIndicator()));
         }
 
         final passengers = snapshot.data ?? [];
-        final seatMap = {for (var p in passengers) p.seatNumber: p};
+        
+        // ARQUITETURA: Lógica de negócio delegada ao Provider
+        final seatMap = passengerProvider.getSeatMap(passengers);
 
         return Scaffold(
           appBar: AppBar(
-            title: Text(
-              widget.isSelectionMode ? 'Selecionar Assento' : 'Mapa de Assentos',
-            ),
+            title: Text(widget.isSelectionMode ? 'Selecionar Assento' : 'Mapa de Assentos'),
             centerTitle: true,
           ),
           body: Column(
@@ -85,7 +80,8 @@ class _ExcursionSeatMapPageState extends State<ExcursionSeatMapPage> {
                   isSelectionMode: widget.isSelectionMode,
                   excursionId: widget.excursionId,
                   passengers: passengers,
-                  passengerAtSeat: seatMap[_selectedSeat],
+                  // ARQUITETURA: Busca normalizada via Provider
+                  passengerAtSeat: seatMap[passengerProvider.normalizeSeatNumber(_selectedSeat!)],
                   onActionComplete: () => setState(() => _selectedSeat = null),
                   onConfirmed: (seat) => Navigator.pop(context, seat),
                 ),
@@ -165,6 +161,7 @@ class _ExcursionSeatMapPageState extends State<ExcursionSeatMapPage> {
   }
 
   Widget _buildSeatGrid(Map<String, Passenger> seatMap, ThemeData theme) {
+    final passengerProvider = context.read<PassengerProvider>();
     final int rows = (widget.totalSeats / 4).ceil();
     return Column(
       children: List.generate(rows, (rowIndex) {
@@ -179,7 +176,8 @@ class _ExcursionSeatMapPageState extends State<ExcursionSeatMapPage> {
                   seatNumber: (startSeat + i).toString(),
                   totalSeats: widget.totalSeats,
                   isSelected: _selectedSeat == (startSeat + i).toString(),
-                  passenger: seatMap[(startSeat + i).toString()],
+                  // ARQUITETURA: Busca normalizada via Provider
+                  passenger: seatMap[passengerProvider.normalizeSeatNumber((startSeat + i).toString())],
                   onTap: _handleSeatTap,
                 ),
                 if (i == 2)
@@ -331,13 +329,6 @@ class _SelectionPanel extends StatelessWidget {
         color: theme.cardColor,
         border: const Border(top: BorderSide(color: Colors.white10)),
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.3),
-            blurRadius: 20,
-            offset: const Offset(0, -5),
-          )
-        ],
       ),
       child: SafeArea(
         child: Column(
@@ -349,10 +340,7 @@ class _SelectionPanel extends StatelessWidget {
                   backgroundColor: theme.primaryColor.withValues(alpha: 0.15),
                   child: Text(
                     selectedSeat,
-                    style: TextStyle(
-                      color: theme.primaryColor,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(color: theme.primaryColor, fontWeight: FontWeight.bold),
                   ),
                 ),
                 const SizedBox(width: 16),
@@ -362,17 +350,13 @@ class _SelectionPanel extends StatelessWidget {
                     children: [
                       Text(
                         passengerAtSeat?.name ?? "Assento Livre",
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
+                        style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
                         overflow: TextOverflow.ellipsis,
                       ),
                       Text(
                         isSelectionMode
                             ? "Confirme para selecionar este assento"
-                            : (passengerAtSeat == null
-                            ? "Disponível para vínculo"
-                            : "Ocupado"),
+                            : (passengerAtSeat == null ? "Disponível para vínculo" : "Ocupado"),
                         style: theme.textTheme.bodySmall?.copyWith(color: Colors.white38),
                       ),
                     ],
@@ -405,9 +389,7 @@ class _SelectionPanel extends StatelessWidget {
 
     return ElevatedButton(
       onPressed: () => _confirmRelease(context, theme),
-      style: ElevatedButton.styleFrom(
-        backgroundColor: theme.colorScheme.error.withValues(alpha: 0.8),
-      ),
+      style: ElevatedButton.styleFrom(backgroundColor: theme.colorScheme.error.withValues(alpha: 0.8)),
       child: const Text("LIBERAR"),
     );
   }
@@ -417,12 +399,8 @@ class _SelectionPanel extends StatelessWidget {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text("Liberar Assento?"),
-        content: Text("Deseja remover ${passengerAtSeat!.name} da poltrona $selectedSeat?"),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("CANCELAR"),
-          ),
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("CANCELAR")),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: theme.colorScheme.error),
             onPressed: () {
@@ -451,9 +429,7 @@ class _SelectionPanel extends StatelessWidget {
       context: context,
       backgroundColor: Theme.of(context).cardColor,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (context) => _PassengerPickerSheet(
         excursionId: excursionId,
         selectedSeat: selectedSeat,
@@ -488,126 +464,56 @@ class _PassengerPickerSheetState extends State<_PassengerPickerSheet> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final provider = context.read<PassengerProvider>();
-    
-    // CORREÇÃO: Obtendo o companyId para carregar a stream do CRM
     final authProvider = context.watch<AuthProvider>();
     final companyId = authProvider.currentUser?.company ?? '';
 
     return Container(
-      constraints: BoxConstraints(
-        maxHeight: MediaQuery.of(context).size.height * 0.8,
-      ),
+      constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.8),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           const SizedBox(height: 12),
-          Container(
-            width: 40,
-            height: 4,
-            decoration: BoxDecoration(
-              color: Colors.white10,
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            child: Text(
-              "Vincular Passageiro",
-              style: theme.textTheme.titleLarge,
-            ),
-          ),
+          Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(2))),
+          Padding(padding: const EdgeInsets.symmetric(vertical: 16), child: Text("Vincular Passageiro", style: theme.textTheme.titleLarge)),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: TextField(
               onChanged: (v) => setState(() => _searchQuery = v),
-              decoration: const InputDecoration(
-                hintText: "Buscar por nome ou documento...",
-                prefixIcon: Icon(Icons.search),
-              ),
+              decoration: const InputDecoration(hintText: "Buscar...", prefixIcon: Icon(Icons.search)),
             ),
           ),
           Expanded(
             child: companyId.isEmpty 
               ? const Center(child: Text("Empresa não identificada."))
               : StreamBuilder<List<Passenger>>(
-                  // CORREÇÃO: Mudado de getter para método com companyId
                   stream: provider.getGlobalPassengersStream(companyId),
                   builder: (context, snapshot) {
-                    if (!snapshot.hasData) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
-
+                    if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
                     final filtered = snapshot.data!.where((pGlobal) {
-                      final exP = widget.passengersInExcursion
-                          .where((pEx) => pEx.id == pGlobal.id)
-                          .firstOrNull;
-                      
-                      final matchesSearch = pGlobal.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-                          pGlobal.document.contains(_searchQuery);
-                      
-                      return (exP == null || exP.seatNumber.isEmpty) && matchesSearch;
+                      final exP = widget.passengersInExcursion.where((pEx) => pEx.id == pGlobal.id).firstOrNull;
+                      return (exP == null || exP.seatNumber.isEmpty) && 
+                             pGlobal.name.toLowerCase().contains(_searchQuery.toLowerCase());
                     }).toList();
 
-                    if (filtered.isEmpty) {
-                      return Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(32.0),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(Icons.search_off, size: 48, color: Colors.white12),
-                              const SizedBox(height: 16),
-                              Text(
-                                _searchQuery.isEmpty 
-                                    ? "Nenhum passageiro disponível para vínculo." 
-                                    : "Nenhum passageiro encontrado para '$_searchQuery'",
-                                textAlign: TextAlign.center,
-                                style: theme.textTheme.bodyMedium?.copyWith(color: Colors.white38),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    }
-
                     return ListView.separated(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      padding: const EdgeInsets.all(16),
                       itemCount: filtered.length,
-                      separatorBuilder: (_, __) => const Divider(color: Colors.white10, height: 1),
-                      itemBuilder: (context, index) {
-                        final p = filtered[index];
-                        return ListTile(
-                          leading: CircleAvatar(
-                            backgroundColor: Colors.white.withValues(alpha: 0.05),
-                            child: const Icon(Icons.person, color: Colors.white54),
-                          ),
-                          title: Text(p.name),
-                          subtitle: Text(
-                            p.document.isEmpty ? "Sem documento" : p.document,
-                          ),
-                          onTap: () => _handleLink(context, provider, p),
-                        );
-                      },
+                      separatorBuilder: (_, __) => const Divider(color: Colors.white10),
+                      itemBuilder: (context, index) => ListTile(
+                        title: Text(filtered[index].name),
+                        onTap: () => _handleLink(context, provider, filtered[index]),
+                      ),
                     );
                   },
                 ),
           ),
-          const SizedBox(height: 20),
         ],
       ),
     );
   }
 
-  Future<void> _handleLink(
-      BuildContext context,
-      PassengerProvider provider,
-      Passenger p,
-      ) async {
-    final excursion = context
-        .read<ExcursionProvider>()
-        .excursions
-        .firstWhere((e) => e.id == widget.excursionId);
-
+  Future<void> _handleLink(BuildContext context, PassengerProvider provider, Passenger p) async {
+    final excursion = context.read<ExcursionProvider>().excursions.firstWhere((e) => e.id == widget.excursionId);
     final success = await provider.linkExistingPassenger(
       context: context,
       passengerId: p.id,
@@ -616,14 +522,7 @@ class _PassengerPickerSheetState extends State<_PassengerPickerSheet> {
       totalValue: excursion.basePrice,
       seatNumber: widget.selectedSeat,
     );
-
     if (context.mounted && success) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("${p.name} vinculado com sucesso!"),
-          backgroundColor: AppTheme.successColor,
-        ),
-      );
       Navigator.pop(context);
       widget.onLinked();
     }

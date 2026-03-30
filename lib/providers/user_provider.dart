@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../models/user.dart';
 import '../services/user_service.dart';
-import '../repositories/user_repository.dart';
 
 class UserProvider with ChangeNotifier {
   final UserService _service;
@@ -18,8 +17,8 @@ class UserProvider with ChangeNotifier {
   String? _currentCompanyId;
   String? _currentInviteUserId;
 
-  UserProvider({UserService? service})
-      : _service = service ?? UserService(UserRepository());
+  // Injeção de dependência limpa
+  UserProvider(this._service);
 
   List<User> get users => _searchTerm.isEmpty ? _allUsers : _filteredUsers;
   List<Map<String, dynamic>> get pendingInvites => _pendingInvites;
@@ -27,7 +26,6 @@ class UserProvider with ChangeNotifier {
   String? get error => _error;
   int get usersCount => users.length;
 
-  /// Limpa todos os dados e encerra as assinaturas (Essencial para logout seguro)
   void clearData() {
     _userSubscription?.cancel();
     _inviteSubscription?.cancel();
@@ -74,7 +72,7 @@ class UserProvider with ChangeNotifier {
     if (_currentCompanyId == companyId) return;
 
     _currentCompanyId = companyId;
-    _isLoading = true;
+    _setLoading(true);
     _userSubscription?.cancel();
 
     _userSubscription = _service.getUsersStream(companyId).listen(

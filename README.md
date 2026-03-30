@@ -11,38 +11,61 @@ O **Transferr** é um ecossistema **SaaS (Software as a Service)** robusto, proj
 
 ## ✨ Funcionalidades em Destaque
 
-### 🏢 Ecossistema Aberto & Multi-tenant
-- **Cadastro Independente:** Guiais, agentes e motoristas podem criar seus perfis de forma autônoma, ficando disponíveis para serem recrutados por agências através de convites por e-mail.
-- **Contexto de Atuação:** Usuários podem estar vinculados a múltiplas empresas e alternar o contexto de dados instantaneamente.
-- **Isolamento de Dados:** Filtros nativos garantem que viagens, passageiros e lucros sejam visíveis apenas para os membros da empresa ativa.
+### 🏢 Ecossistema Multi-tenant & Autônomo
+- **Cadastro Independente:** Guias, agentes e motoristas criam perfis de forma autônoma, prontos para serem recrutados por agências via convite.
+- **Contexto de Atuação Dinâmico:** Alternância instantânea entre múltiplas empresas com isolamento total de dados.
+- **Governança de Dados:** Filtros nativos garantem que viagens, passageiros e lucros sejam visíveis apenas para os membros da empresa ativa.
 
-### 💰 Financeiro de Alta Precisão
-- **Saúde Financeira Real:** Monitoramento de caixa em tempo real, diferenciando faturamento previsto de valores efetivamente recebidos.
-- **Congelamento de Preço (`saleValue`):** O valor da passagem é fixado no momento da reserva, permitindo lotes promocionais sem corromper o histórico financeiro.
-- **Planilha de Despesas:** Gestão de custos operacionais (combustível, guias, pedágios) com cálculo automático de ROI.
+### 💰 Inteligência Financeira
+- **Saúde Financeira Real:** Monitoramento em tempo real diferenciando faturamento previsto de valores efetivados em caixa.
+- **Congelamento de Preço (`saleValue`):** Fixação do valor no ato da reserva, protegendo o histórico financeiro contra alterações de lotes futuros.
+- **Gestão de ROI:** Planilha de despesas operacionais (combustível, pedágios, pessoal) com cálculo automático de lucratividade por viagem.
 
-### 🚌 Operação e Logística
-- **Mapa de Assentos Interativo:** Visualização física da ocupação do veículo e alocação dinâmica.
+### 🚌 Logística e Operação
+- **Mapa de Assentos Interativo:** Visualização física e alocação dinâmica da ocupação do veículo.
 - **Check-in Multi-status:** Controle de fluxo (Aguardando, Embarcou, Parada, Desembarcou) sincronizado via Firebase.
-- **CRM Global de Passageiros:** Base centralizada para reutilização de dados de clientes em múltiplas viagens.
+- **CRM Global de Passageiros:** Base centralizada para reutilização inteligente de dados de clientes em múltiplas operações.
 
 ---
 
-## 🛠️ Tecnologias e Padrões
+## 🏗️ Arquitetura e Estrutura
 
-O projeto utiliza tecnologias de ponta para garantir performance e segurança:
+O projeto segue princípios de **Clean Architecture** e **DDD (Domain-Driven Design)** para garantir um código escalável e de fácil manutenção:
+
+- **`models`**: Objetos de domínio e entidades puras.
+- **`validators`**: Camada desacoplada responsável exclusivamente por regras de validação e integridade.
+- **`services`**: Orquestradores de fluxo e mediadores de regras de negócio.
+- **`repositories`**: Interface de comunicação direta com o Firebase/APIs.
+- **`providers`**: Gerenciamento de estado e integração dos dados com a UI.
+- **`screens`**: Camada de apresentação (UI) construída em Flutter.
+
+**Fluxo de Dados:** `UI` ➔ `Provider` ➔ `Service` ➔ `Validator` ➔ `Repository` ➔ `Firebase`.
+
+---
+
+## 🧠 Decisões Técnicas Recentes
+
+Para manter o nível de excelência técnica e performance mobile, o projeto passou por uma evolução estrutural significativa:
+
+### 1. Refatoração do `AuthService`
+O serviço de autenticação foi transformado de um componente denso para um **Orquestrador Lean**. 
+- **Benefício:** Redução da complexidade cognitiva e melhor legibilidade para novos desenvolvedores.
+- **Performance:** Fluxos de login e registro otimizados para menor latência em dispositivos mobile.
+
+### 2. Implementação da Camada `Validators`
+Extraímos toda a lógica de validação dos Services para uma camada dedicada.
+- **Testabilidade:** Permite testes unitários rigorosos das regras de negócio sem a necessidade de mocks complexos de banco de dados.
+- **Reuso:** As mesmas regras de validação podem ser invocadas em diferentes partes do app, garantindo a integridade dos dados (Single Source of Truth).
+- **Manutenção:** Facilita a alteração de regras (ex: formato de documento ou telefone) em um único ponto centralizado.
+
+---
+
+## 🛠️ Tecnologias
+
 - **Framework:** Flutter SDK (Android/iOS)
 - **Backend:** Firebase (Cloud Firestore & Firebase Auth)
 - **Estado:** Provider & StreamSubscriptions otimizadas.
-- **Arquitetura:** Clean Architecture (Domain-Driven Design).
-
----
-
-## 🏗️ Estrutura do Projeto
-O Transferr organiza as responsabilidades de forma desacoplada:
-`Models` ➔ `Repositories` ➔ `Services` ➔ `Providers` ➔ `UI`.
-
-Consulte o [DOCS.md](DOCS.md) para detalhes sobre as Regras de Negócio e Requisitos.
+- **Testes:** Flutter Test & Mocktail para testes unitários robustos.
 
 ---
 

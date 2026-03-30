@@ -1,17 +1,16 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../models/user.dart';
-import '../repositories/user_repository.dart';
 import '../services/auth_service.dart';
 import 'user_provider.dart';
-import 'excursion_provider.dart'; // Import necessário
+import 'excursion_provider.dart';
 
 class AuthProvider with ChangeNotifier {
   final AuthService _authService;
   StreamSubscription? _authSubscription;
   
   UserProvider? _userProvider;
-  ExcursionProvider? _excursionProvider; // Nova referência
+  ExcursionProvider? _excursionProvider;
 
   User? _currentUser;
   bool _isLoading = false;
@@ -22,12 +21,10 @@ class AuthProvider with ChangeNotifier {
   String? get errorMessage => _errorMessage;
   bool get isAuthenticated => _currentUser != null;
 
-  AuthProvider({AuthService? service})
-      : _authService = service ?? AuthService(UserRepository()) {
+  AuthProvider(this._authService) {
     _init();
   }
 
-  /// Integração para limpar dados de outros providers no logout
   void update(UserProvider userProvider, ExcursionProvider excursionProvider) {
     _userProvider = userProvider;
     _excursionProvider = excursionProvider;
@@ -52,7 +49,6 @@ class AuthProvider with ChangeNotifier {
       final user = await _authService.getUserData(targetUid);
       if (user != null) {
         _currentUser = user;
-        _checkAndRepairUserData(user);
         notifyListeners();
       }
     } catch (e) {
@@ -60,14 +56,7 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
-  Future<void> _checkAndRepairUserData(User user) async {
-    try {
-      await _authService.saveUserData(user);
-    } catch (e) {
-      debugPrint("⚠️ AUTH_PROVIDER (Repair): Erro ao atualizar dados: $e");
-    }
-  }
-
+  // RESTAURADO: Método para criar empresa (usado na PendingCompanyPage)
   Future<void> createCompany(String companyName) async {
     if (_currentUser == null) return;
     _clearError();
@@ -83,6 +72,7 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
+  // RESTAURADO: Método para trocar empresa (usado na MyCompanyPage)
   Future<void> switchCompany(String companyId) async {
     if (_currentUser == null) return;
     _setLoading(true);
@@ -97,6 +87,7 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
+  // RESTAURADO: Método de registro (usado na RegistrationPage)
   Future<void> register(User user, String password) async {
     _clearError();
     _setLoading(true);
@@ -123,21 +114,16 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
-  /// Logout seguro que limpa assinaturas de TODOS os providers
   Future<void> logout() async {
-    // 1. Limpa os dados dos outros providers ANTES do logout (evita erros de permissão)
     _userProvider?.clearData();
     _excursionProvider?.clearData();
-    
-    // 2. Realiza o sign out no Firebase
     await _authService.logout();
-    
-    // 3. Limpa o estado local
     _currentUser = null;
     notifyListeners();
   }
 
   void _setLoading(bool value) {
+    if (_isLoading == value) return;
     _isLoading = value;
     notifyListeners();
   }

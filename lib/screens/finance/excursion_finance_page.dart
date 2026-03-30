@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'; 
 import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
 import '../../config/theme/app_theme.dart';
 import '../../models/excursion.dart';
 import '../../models/expense.dart'; 
 import '../../providers/excursion_provider.dart';
-import '../excursions/add_excursion_page.dart';
 
 class ExcursionFinancePage extends StatefulWidget {
   final Excursion excursion;
@@ -19,22 +18,18 @@ class ExcursionFinancePage extends StatefulWidget {
 class _ExcursionFinancePageState extends State<ExcursionFinancePage> {
   late Stream<List<Expense>> _expensesStream;
   late Stream<double> _revenueStream;
+  final _currencyFormatter = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
 
   @override
   void initState() {
     super.initState();
     final excursionProvider = context.read<ExcursionProvider>();
-    
-    // PERFORMANCE: Inicializamos os streams aqui para evitar que sejam 
-    // recriados a cada rebuild do widget pai ou mudanças no StreamBuilder.
     _expensesStream = excursionProvider.watchExpenses(widget.excursion.id);
     _revenueStream = excursionProvider.getTotalRevenueStream(widget.excursion.id);
   }
 
   @override
   Widget build(BuildContext context) {
-    final excursionProvider = context.read<ExcursionProvider>();
-
     return Scaffold(
       appBar: AppBar(title: const Text('Planilha Financeira')),
       body: StreamBuilder<List<Expense>>(
@@ -43,17 +38,18 @@ class _ExcursionFinancePageState extends State<ExcursionFinancePage> {
           return StreamBuilder<double>(
             stream: _revenueStream,
             builder: (context, snapshotRevenue) {
-              if (snapshotExpenses.connectionState == ConnectionState.waiting && !snapshotExpenses.hasData) {
+              // ENDIREITANDO: A UI deve aparecer se houver dados (hasData), 
+              // mesmo que o ConnectionState ainda seja 'waiting'.
+              final bool isLoading = (snapshotExpenses.connectionState == ConnectionState.waiting && !snapshotExpenses.hasData) ||
+                                   (snapshotRevenue.connectionState == ConnectionState.waiting && !snapshotRevenue.hasData);
+
+              if (isLoading) {
                 return const Center(child: CircularProgressIndicator());
               }
 
               final despesas = snapshotExpenses.data ?? [];
-              final totalDespesas = despesas.fold<double>(
-                0,
-                (sum, item) => sum + item.value,
-              );
-
               final faturamentoReal = snapshotRevenue.data ?? 0.0;
+              final totalDespesas = despesas.fold<double>(0, (sum, item) => sum + item.value);
 
               final faturamentoPrevisto = widget.excursion.faturamentoPrevisto;
               final lucroPrevisto = widget.excursion.calcularLucroPrevisto(totalDespesas);
@@ -61,65 +57,49 @@ class _ExcursionFinancePageState extends State<ExcursionFinancePage> {
               final custoPorAssento = widget.excursion.calcularCustoPorAssento(totalDespesas);
 
               return CustomScrollView(
-                cacheExtent: 1000, // Otimização para listas longas
                 slivers: [
                   SliverToBoxAdapter(
                     child: Padding(
                       padding: const EdgeInsets.all(16.0),
                       child: Column(
                         children: [
-                          _buildSummaryGrid(
-                            faturamentoPrevisto,
-                            totalDespesas,
-                            lucroPrevisto,
-                            lucroAtual,
-                          ),
+                          _buildSummaryGrid(faturamentoPrevisto, totalDespesas, lucroPrevisto, lucroAtual),
                           const SizedBox(height: 16),
                           _buildCustoAssentoCard(custoPorAssento),
+                          const SizedBox(height: 24),
+                          _buildExpensesHeader(context),
                         ],
                       ),
                     ),
                   ),
-
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            "DESPESAS LANÇADAS",
-                            style: Theme.of(context).textTheme.titleSmall
-                                ?.copyWith(color: Colors.white60),
-                          ),
-                          TextButton.icon(
-                            onPressed: () => _showAddExpenseModal(context),
-                            icon: const Icon(Icons.add, size: 18, color: AppTheme.successColor),
-                            label: const Text("ADICIONAR", style: TextStyle(color: AppTheme.successColor)),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-
+                  
                   if (despesas.isEmpty)
-                    const SliverFillRemaining(
-                      hasScrollBody: false,
-                      child: Center(child: Text("Nenhuma despesa cadastrada.")),
+                    SliverToBoxAdapter(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 80),
+                        alignment: Alignment.center,
+                        child: Text(
+                          "Nenhuma despesa cadastrada.",
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.white38),
+                        ),
+                      ),
                     )
                   else
                     SliverPadding(
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
                       sliver: SliverList(
                         delegate: SliverChildBuilderDelegate(
                           (context, index) => _ExpenseItemTile(
                             item: despesas[index],
+                            formatter: _currencyFormatter,
                             onDelete: () => _confirmDelete(despesas[index].id),
                           ),
                           childCount: despesas.length,
                         ),
                       ),
                     ),
+                  const SliverToBoxAdapter(child: SizedBox(height: 100)),
                 ],
               );
             },
@@ -129,7 +109,22 @@ class _ExcursionFinancePageState extends State<ExcursionFinancePage> {
     );
   }
 
-  // --- MÉTODOS DE UI EXTRAÍDOS PARA EVITAR REBUILDS PESADOS ---
+  Widget _buildExpensesHeader(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          "DESPESAS LANÇADAS", 
+          style: Theme.of(context).textTheme.titleSmall?.copyWith(color: Colors.white60)
+        ),
+        TextButton.icon(
+          onPressed: () {}, 
+          icon: const Icon(Icons.add, size: 18, color: AppTheme.successColor),
+          label: const Text("ADICIONAR", style: TextStyle(color: AppTheme.successColor)),
+        ),
+      ],
+    );
+  }
 
   Widget _buildSummaryGrid(double prev, double desp, double lucroP, double lucroA) {
     return GridView.count(
@@ -143,7 +138,11 @@ class _ExcursionFinancePageState extends State<ExcursionFinancePage> {
         _infoCard("Faturamento Prev.", prev, Colors.blue),
         _infoCard("Total Despesas", desp, AppTheme.errorColor),
         _infoCard("Lucro Previsto", lucroP, AppTheme.successColor),
-        _infoCard("Lucro Atual (Em Caixa)", lucroA, Colors.amber),
+        _infoCard(
+          "Lucro Atual (Em Caixa)", 
+          lucroA, 
+          lucroA >= 0 ? AppTheme.successColor : Colors.red
+        ),
       ],
     );
   }
@@ -164,7 +163,7 @@ class _ExcursionFinancePageState extends State<ExcursionFinancePage> {
           const SizedBox(height: 6),
           FittedBox(
             child: Text(
-              "R\$ ${value.toStringAsFixed(2)}",
+              _currencyFormatter.format(value),
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: color),
             ),
           ),
@@ -190,7 +189,7 @@ class _ExcursionFinancePageState extends State<ExcursionFinancePage> {
             children: [
               const Text("VALOR DE CUSTO / ASSENTO", style: TextStyle(fontSize: 10, color: Colors.white70)),
               Text(
-                "R\$ ${custo.toStringAsFixed(2)}",
+                _currencyFormatter.format(custo),
                 style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
               ),
             ],
@@ -206,98 +205,23 @@ class _ExcursionFinancePageState extends State<ExcursionFinancePage> {
       builder: (context) => AlertDialog(
         title: const Text("Excluir despesa?"),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancelar")),
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("CANCELAR")),
           TextButton(
-            onPressed: () {
-              context.read<ExcursionProvider>().deleteExpense(widget.excursion.id, expenseId);
-              Navigator.pop(context);
-            },
-            child: const Text("Excluir", style: TextStyle(color: AppTheme.errorColor)),
+            onPressed: () => Navigator.pop(context),
+            child: const Text("EXCLUIR", style: TextStyle(color: AppTheme.errorColor)),
           ),
         ],
       ),
     );
   }
-
-  void _showAddExpenseModal(BuildContext context) {
-    final descCtrl = TextEditingController();
-    final valorCtrl = TextEditingController();
-    String categoria = 'Transporte';
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: AppTheme.cardColor,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (context) => Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-          left: 20, right: 20, top: 20,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Center(child: Text("Nova Despesa", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
-            const SizedBox(height: 20),
-            TextField(
-              controller: descCtrl,
-              textCapitalization: TextCapitalization.sentences,
-              decoration: const InputDecoration(
-                labelText: "Descrição (Ex: Ônibus, Água)",
-                prefixIcon: Icon(Icons.description_outlined),
-              ),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: valorCtrl,
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly, CurrencyInputFormatter()],
-              decoration: const InputDecoration(labelText: "Valor da Despesa", prefixIcon: Icon(Icons.attach_money)),
-            ),
-            const SizedBox(height: 16),
-            DropdownButtonFormField<String>(
-              value: categoria,
-              dropdownColor: AppTheme.cardColor,
-              items: ['Transporte', 'Alimentação', 'Hospedagem', 'Consumíveis', 'Outros']
-                  .map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
-              onChanged: (v) => categoria = v!,
-              decoration: const InputDecoration(labelText: "Categoria", prefixIcon: Icon(Icons.category_outlined)),
-            ),
-            const SizedBox(height: 30),
-            SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: ElevatedButton(
-                onPressed: () {
-                  String plainValue = valorCtrl.text.replaceAll('R\$', '').replaceAll('.', '').replaceAll(',', '.').trim();
-                  final valor = double.tryParse(plainValue) ?? 0.0;
-                  if (descCtrl.text.trim().isNotEmpty && valor > 0) {
-                    context.read<ExcursionProvider>().addExpense(
-                      excursionId: widget.excursion.id,
-                      description: descCtrl.text.trim(),
-                      value: valor,
-                      category: categoria,
-                    );
-                    Navigator.pop(context);
-                  }
-                },
-                child: const Text("SALVAR DESPESA"),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }
 
-/// Widget extraído para performance na lista de despesas
 class _ExpenseItemTile extends StatelessWidget {
   final Expense item;
+  final NumberFormat formatter;
   final VoidCallback onDelete;
 
-  const _ExpenseItemTile({required this.item, required this.onDelete});
+  const _ExpenseItemTile({required this.item, required this.formatter, required this.onDelete});
 
   @override
   Widget build(BuildContext context) {
@@ -305,21 +229,20 @@ class _ExpenseItemTile extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
         leading: const CircleAvatar(
-          backgroundColor: Colors.white10,
-          child: Icon(Icons.receipt_long, color: Colors.white60, size: 20),
+          backgroundColor: Colors.white10, 
+          child: Icon(Icons.receipt_long, color: Colors.white60, size: 20)
         ),
         title: Text(item.description),
-        subtitle: Text(item.category, style: const TextStyle(fontSize: 12)),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              "- R\$ ${item.value.toStringAsFixed(2)}",
-              style: const TextStyle(color: AppTheme.errorColor, fontWeight: FontWeight.bold),
+              "- ${formatter.format(item.value)}", 
+              style: const TextStyle(color: AppTheme.errorColor, fontWeight: FontWeight.bold)
             ),
             IconButton(
-              icon: const Icon(Icons.delete_outline, size: 20, color: Colors.white24),
-              onPressed: onDelete,
+              icon: const Icon(Icons.delete_outline, size: 20, color: Colors.white24), 
+              onPressed: onDelete
             ),
           ],
         ),

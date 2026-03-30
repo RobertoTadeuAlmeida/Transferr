@@ -1,6 +1,7 @@
 import 'dart:async';
 import '../models/user.dart';
 import '../repositories/user_repository.dart';
+import '../validators/user_validator.dart';
 
 class UserService {
   final UserRepository _userRepo;
@@ -12,11 +13,34 @@ class UserService {
     return _userRepo.getUsersStream(companyId);
   }
 
+  /// Verifica se um documento (CPF/RG) já está cadastrado para outro usuário.
+  Future<bool> isDocumentUnique(String document, String currentUserId) async {
+    if (document.isEmpty) return true;
+    
+    final existingUser = await _userRepo.getUserByDocument(document);
+    
+    if (existingUser != null && existingUser.id != currentUserId) {
+      throw "Documento já cadastrado para outro usuário.";
+    }
+    
+    return true;
+  }
+
+  /// Salva ou atualiza os dados do usuário com validações rigorosas.
   Future<void> saveUserData(User user) async {
+    // 1. Validação de integridade do modelo (Regras de formato, campos obrigatórios, etc)
+    UserValidator.validate(user);
+
+    // 2. Validação de unicidade no banco de dados (Regra de Negócio)
+    await isDocumentUnique(user.document, user.id);
+
+    // 3. Sanitização final para persistência
     final sanitizedUser = user.copyWith(
       name: user.name.trim(),
       email: user.email.toLowerCase().trim(),
+      companyName: user.companyName.isEmpty ? "Aguardando Vínculo" : user.companyName.trim(),
     );
+
     return _userRepo.saveUserData(sanitizedUser);
   }
 
@@ -41,7 +65,6 @@ class UserService {
     required String currentUserId,
   }) async {
     final email = toUserEmail.trim().toLowerCase();
-
     final targetUser = await _userRepo.getUserByEmail(email);
     
     if (targetUser == null) {
@@ -68,31 +91,22 @@ class UserService {
     return _userRepo.getPendingInvites(userId);
   }
 
-  /// Responde ao convite garantindo a integridade dos múltiplos papéis (Roles)
   Future<void> respondToInvite({
     required String inviteId,
     required String status,
     required User currentUser,
     required String companyId,
   }) async {
-    // 1. Atualiza o status do convite no banco
     await _userRepo.respondToInvite(inviteId, status);
     
     if (status == 'aceito') {
-      // 2. Atualiza a lista de empresas vinculadas
-      final List<String> updatedCompanies = List.from(currentUser.companies);
-      if (!updatedCompanies.contains(companyId)) {
-        updatedCompanies.add(companyId);
-      }
+      final Set<String> updatedCompanies = Set<String>.from(currentUser.companies)
+        ..add(companyId)
+        ;
 
-      // 3. ATUALIZA OS PAPÉIS (ROLES): 
-      // Todo usuário convidado entra inicialmente como 'AGENTE' na organização.
-      // O Admin da empresa pode promover para 'ADMIN' depois se desejar.
       final Map<String, String> updatedRoles = Map.from(currentUser.roles);
       updatedRoles[companyId] = 'AGENTE';
       
-      // 4. Se o usuário não tiver NENHUMA empresa ativa (recém cadastrado), 
-      // definimos esta como a padrão.
       String newActiveCompany = currentUser.company;
       if (newActiveCompany.isEmpty) {
         newActiveCompany = companyId;
@@ -100,12 +114,12 @@ class UserService {
       
       final updatedUser = currentUser.copyWith(
         company: newActiveCompany, 
-        companies: updatedCompanies,
+        companies: updatedCompanies.toList(),
         roles: updatedRoles,
         isActive: true,
       );
       
-      await _userRepo.saveUserData(updatedUser);
+      await saveUserData(updatedUser);
     }
   }
 }

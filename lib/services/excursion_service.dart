@@ -8,11 +8,9 @@ import '../repositories/passenger_repository.dart';
 class ExcursionService {
   final ExcursionRepository _excursionRepo;
   final PassengerRepository _passengerRepo;
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   ExcursionService(this._excursionRepo, this._passengerRepo);
 
-  // Alterado para usar companyId por causa das Security Rules
   Stream<List<Excursion>> watchExcursions({String? companyId}) {
     return _excursionRepo.watchExcursions(companyId: companyId);
   }
@@ -20,10 +18,9 @@ class ExcursionService {
   Future<void> createExcursion(Excursion excursion) async {
     final sanitizedName = excursion.name.trim();
     if (sanitizedName.isEmpty) {
-      throw Exception("O nome da excursão é obrigatório para iniciar o cadastro.");
+      throw Exception("O nome da excursão é obrigatório.");
     }
-    final validatedExcursion = excursion.copyWith(name: sanitizedName);
-    return _excursionRepo.add(validatedExcursion);
+    return _excursionRepo.add(excursion.copyWith(name: sanitizedName));
   }
 
   Future<void> updateExcursion(Excursion excursion) async {
@@ -31,98 +28,70 @@ class ExcursionService {
     if (sanitizedName.isEmpty) {
       throw Exception("O nome da excursão não pode ficar vazio.");
     }
-    final validatedExcursion = excursion.copyWith(name: sanitizedName);
-    return _excursionRepo.update(validatedExcursion.id, validatedExcursion.toMap());
+    return _excursionRepo.update(excursion.id, excursion.copyWith(name: sanitizedName).toMap());
   }
 
   Future<void> deleteExcursions(List<String> ids) async {
-    final batch = _firestore.batch();
-    for (var id in ids) {
-      final docRef = _firestore.collection('excursoes').doc(id);
-      batch.update(docRef, {
-        'excluido': true,
-        'deletadoEm': FieldValue.serverTimestamp(),
-      });
-    }
-    return batch.commit();
+    // Agora o Repository cuida do Batch de soft delete
+    return _excursionRepo.softDeleteMany(ids);
   }
 
   Future<void> startExcursion(String excursionId) async {
-    final doc = await _firestore.collection('excursoes').doc(excursionId).get();
-    final currentStatus = doc.data()?['status'];
+    final excursion = await _excursionRepo.getExcursionById(excursionId);
+    if (excursion == null) throw Exception("Excursão não encontrada.");
 
-    if (currentStatus == 'CONCLUIDA' || currentStatus == 'CANCELADA') {
-      throw Exception("Não é possível iniciar uma viagem que já foi finalizada ou cancelada.");
+    if (excursion.status == ExcursionStatus.concluida || excursion.status == ExcursionStatus.cancelada) {
+      throw Exception("Não é possível iniciar uma viagem finalizada ou cancelada.");
     }
 
-    try {
-      await _excursionRepo.update(excursionId, {
-        'status': 'EM_ANDAMENTO',
-        'dataInicioReal': FieldValue.serverTimestamp(),
-        'ultimaSincronizacao': FieldValue.serverTimestamp(),
-      });
-    } catch (e) {
-      rethrow;
-    }
+    return _excursionRepo.update(excursionId, {
+      'status': 'EM_ANDAMENTO',
+      'dataInicioReal': FieldValue.serverTimestamp(),
+    });
   }
 
   Future<void> finalizeExcursion(String excursionId) async {
-    try {
-      final WriteBatch batch = _firestore.batch();
-      final excursionRef = _firestore.collection('excursoes').doc(excursionId);
-      final vacanciesSnap = await excursionRef.collection('vagas').get();
+    final vacanciesSnap = await _excursionRepo.getVacancies(excursionId);
+    
+    int totalEfetivo = 0;
+    List<Map<String, dynamic>> passengerUpdates = [];
+
+    for (var vacancyDoc in vacanciesSnap.docs) {
+      final data = vacancyDoc.data();
+      final String statusEmbarque = data['statusEmbarque'] ?? '';
       
-      int totalEfetivo = 0;
+      final isBoarded = statusEmbarque == BoardingStatus.embarcou.value || 
+                        statusEmbarque == BoardingStatus.desembarcou.value ||
+                        statusEmbarque == BoardingStatus.parada.value;
 
-      for (var vacancyDoc in vacanciesSnap.docs) {
-        final data = vacancyDoc.data();
-        final String statusEmbarque = data['statusEmbarque'] ?? '';
-        final passengerId = vacancyDoc.id;
-        final masterRef = _firestore.collection('passageiros').doc(passengerId);
+      if (isBoarded) totalEfetivo++;
 
-        if (statusEmbarque == BoardingStatus.embarcou.value || 
-            statusEmbarque == BoardingStatus.desembarcou.value ||
-            statusEmbarque == BoardingStatus.parada.value) {
-          
-          totalEfetivo++;
-          batch.update(masterRef, {
-            'totalViagens': FieldValue.increment(1),
-            'tripHistory': FieldValue.arrayUnion([excursionId]),
-          });
-        }
-
-        batch.update(masterRef, {
+      // Prepara os dados de atualização do passageiro no CRM
+      passengerUpdates.add({
+        'id': vacancyDoc.id,
+        'data': {
+          if (isBoarded) 'totalViagens': FieldValue.increment(1),
+          if (isBoarded) 'tripHistory': FieldValue.arrayUnion([excursionId]),
           'excursionId': null,
           'poltrona': '',
           'depositValue': 0.0,
           'isPaid': false,
           'statusEmbarque': BoardingStatus.aguardando.value,
           'lastUpdate': FieldValue.serverTimestamp(),
-        });
-      }
-
-      batch.update(excursionRef, {
-        'status': 'CONCLUIDA',
-        'dataFimReal': FieldValue.serverTimestamp(),
-        'assentosEfetivos': totalEfetivo,
-        'atualizadoEm': FieldValue.serverTimestamp(),
+        }
       });
-
-      await batch.commit();
-    } catch (e) {
-      rethrow;
     }
+
+    // O Repository executa o Batch atômico
+    return _excursionRepo.finalizeExcursionBatch(
+      excursionId: excursionId,
+      passengerUpdates: passengerUpdates,
+      totalEfetivo: totalEfetivo,
+    );
   }
 
   Future<void> cancelExcursion(String excursionId) async {
-    try {
-      await _excursionRepo.update(excursionId, {
-        'status': 'CANCELADA',
-        'atualizadoEm': FieldValue.serverTimestamp(),
-      });
-    } catch (e) {
-      rethrow;
-    }
+    return _excursionRepo.update(excursionId, {'status': 'CANCELADA'});
   }
 
   Future<void> syncExcursionCounters(String excursionId) async {
@@ -144,7 +113,6 @@ class ExcursionService {
       'assentosReservados': totalReservados,
       'assentosPagos': totalPagos,
       'faturamentoAtual': faturamentoAtual,
-      'ultimaSincronizacao': FieldValue.serverTimestamp(),
     });
   }
 
@@ -152,33 +120,18 @@ class ExcursionService {
     String passengerId,
     String excursionId,
   ) async {
-    return await _firestore.runTransaction((transaction) async {
-      final excursionDoc = await transaction.get(_firestore.collection('excursoes').doc(excursionId));
-      if (!excursionDoc.exists) throw Exception("Excursão não encontrada.");
-      
-      final excursion = Excursion.fromMap(excursionDoc.id, excursionDoc.data()!);
-      final vacancyRef = _firestore.collection('excursoes').doc(excursionId).collection('vagas').doc(passengerId);
-      final vacancyDoc = await transaction.get(vacancyRef);
+    final excursion = await _excursionRepo.getExcursionById(excursionId);
+    if (excursion == null) throw Exception("Excursão não encontrada.");
 
-      if (!vacancyDoc.exists) throw Exception("Vaga não encontrada.");
+    // O Repository cuida da Transação
+    final result = await _excursionRepo.runPaymentTransaction(
+      excursionId: excursionId,
+      passengerId: passengerId,
+      precoBase: excursion.basePrice,
+    );
 
-      final double valorPago = (vacancyDoc.data()?['depositValue'] ?? 0.0).toDouble();
-      final double precoBase = excursion.basePrice;
-      final bool estaPago = valorPago >= precoBase;
-
-      transaction.update(vacancyRef, {'isPaid': estaPago});
-      
-      return {
-        'valorPago': valorPago,
-        'valorFaltante': (precoBase - valorPago).clamp(0.0, double.infinity),
-        'estaPago': estaPago,
-        'percentual': precoBase > 0 ? (valorPago / precoBase).clamp(0.0, 1.0) : 0.0,
-        'precoBase': precoBase,
-      };
-    }).then((result) async {
-      await syncExcursionCounters(excursionId);
-      return result;
-    });
+    await syncExcursionCounters(excursionId);
+    return result;
   }
 
   Stream<double> streamTotalRevenue(String excursionId) {
@@ -192,10 +145,10 @@ class ExcursionService {
   }
 
   Future<void> addExpense(String excursionId, Expense expense) async {
-    await _excursionRepo.addExpense(excursionId, expense);
+    return _excursionRepo.addExpense(excursionId, expense);
   }
 
   Future<void> deleteExpense(String excursionId, String expenseId) async {
-    await _excursionRepo.deleteExpense(excursionId, expenseId);
+    return _excursionRepo.deleteExpense(excursionId, expenseId);
   }
 }

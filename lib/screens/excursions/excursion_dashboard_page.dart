@@ -24,25 +24,23 @@ class ExcursionDashboardPage extends StatelessWidget {
     final excursionProvider = context.watch<ExcursionProvider>();
     final passengerProvider = context.read<PassengerProvider>();
     
-    // OBTENÇÃO DA EMPRESA ATIVA PARA MULTI-TENANT
     final authProvider = context.watch<AuthProvider>();
     final companyId = authProvider.currentUser?.company ?? '';
 
-    final excursion = excursionProvider.excursions
-        .cast<Excursion?>()
-        .firstWhere((e) => e?.id == excursionId, orElse: () => null);
+    final excursion = excursionProvider.getExcursionById(excursionId);
 
     if (excursion == null) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     final bool isCompleted = excursion.status == ExcursionStatus.concluida;
+    final bool isCanceled = excursion.status == ExcursionStatus.cancelada;
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Painel de Viagem'),
         actions: [
-          if (!isCompleted)
+          if (!isCompleted && !isCanceled)
             IconButton(
               icon: const Icon(Icons.edit_outlined),
               onPressed: () => _navigateToEdit(context, excursion),
@@ -56,7 +54,6 @@ class ExcursionDashboardPage extends StatelessWidget {
           final double totalExpenses = expenses.fold(0, (sum, item) => sum + item.value);
 
           return StreamBuilder<List<Passenger>>(
-            // CORREÇÃO: Adicionado companyId na chamada do stream
             stream: passengerProvider.watchPassengers(excursionId, companyId),
             builder: (context, passengerSnapshot) {
               final passengers = passengerSnapshot.data ?? [];
@@ -74,6 +71,17 @@ class ExcursionDashboardPage extends StatelessWidget {
                   
                   _buildOperationalControl(context, excursion),
                   
+                  // TDD: Adicionando o botão de cancelamento se não estiver concluída/cancelada
+                  if (!isCompleted && !isCanceled)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 12),
+                      child: TextButton.icon(
+                        onPressed: () => _confirmCancel(context, excursionProvider, excursionId),
+                        icon: const Icon(Icons.cancel_outlined, color: Colors.redAccent, size: 20),
+                        label: const Text("CANCELAR VIAGEM", style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+
                   const SizedBox(height: 20),
 
                   ExcursionStatsCard(
@@ -87,7 +95,7 @@ class ExcursionDashboardPage extends StatelessWidget {
 
                   _MenuActionTile(
                     title: "Lista de Passageiros",
-                    subtitle: isCompleted 
+                    subtitle: (isCompleted || isCanceled)
                         ? "Histórico da lista de presença" 
                         : "${excursion.paidSeats} de ${excursion.reservedSeats} passagens pagas",
                     icon: Icons.people_alt_rounded,
@@ -98,7 +106,7 @@ class ExcursionDashboardPage extends StatelessWidget {
                         builder: (_) =>
                             PassengersListPage(
                               excursionId: excursionId, 
-                              readOnly: isCompleted
+                              readOnly: isCompleted || isCanceled
                             ),
                       ),
                     ),
@@ -106,7 +114,7 @@ class ExcursionDashboardPage extends StatelessWidget {
 
                   _MenuActionTile(
                     title: "Mapa de Assentos",
-                    subtitle: isCompleted ? "Ocupação final da viagem" : "Visualizar ocupação física",
+                    subtitle: (isCompleted || isCanceled) ? "Ocupação final da viagem" : "Visualizar ocupação física",
                     icon: Icons.grid_view_rounded,
                     color: Colors.purple,
                     onTap: () {
@@ -117,13 +125,13 @@ class ExcursionDashboardPage extends StatelessWidget {
                           'excursionId': excursionId,
                           'totalSeats': excursion.totalSeats,
                           'title': 'Mapa de Assentos',
-                          'readOnly': isCompleted,
+                          'readOnly': isCompleted || isCanceled,
                         },
                       );
                     },
                   ),
 
-                  if (!isCompleted)
+                  if (!isCompleted && !isCanceled)
                     _MenuActionTile(
                       title: "Check-in de Operações",
                       subtitle: "Confirmação de embarque e desembarque",
@@ -159,12 +167,14 @@ class ExcursionDashboardPage extends StatelessWidget {
                     },
                   ),
                   
-                  if (isCompleted)
+                  if (isCompleted || isCanceled)
                     Padding(
                       padding: const EdgeInsets.only(top: 24),
                       child: Center(
                         child: Text(
-                          "Viagem encerrada em ${DateFormat('dd/MM/yyyy').format(excursion.updatedAt ?? DateTime.now())}\nOs dados desta excursão não podem mais ser alterados.",
+                          isCanceled 
+                            ? "Viagem CANCELADA em ${DateFormat('dd/MM/yyyy').format(excursion.updatedAt ?? DateTime.now())}"
+                            : "Viagem encerrada em ${DateFormat('dd/MM/yyyy').format(excursion.updatedAt ?? DateTime.now())}\nOs dados desta excursão não podem mais ser alterados.",
                           textAlign: TextAlign.center,
                           style: const TextStyle(color: Colors.grey, fontSize: 11, fontStyle: FontStyle.italic),
                         ),
@@ -179,24 +189,46 @@ class ExcursionDashboardPage extends StatelessWidget {
     );
   }
 
+  void _confirmCancel(BuildContext context, ExcursionProvider provider, String id) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Confirmar Cancelamento"),
+        content: const Text("Tem certeza que deseja cancelar esta viagem? Esta ação não pode ser desfeita e os passageiros ficarão sem vínculo."),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("VOLTAR")),
+          ElevatedButton(
+            onPressed: () {
+              provider.cancelExcursion(id);
+              Navigator.pop(ctx);
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+            child: const Text("CANCELAR VIAGEM"),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildOperationalControl(BuildContext context, Excursion excursion) {
-    if (excursion.status == ExcursionStatus.concluida) {
+    if (excursion.status == ExcursionStatus.concluida || excursion.status == ExcursionStatus.cancelada) {
+      final isCancel = excursion.status == ExcursionStatus.cancelada;
       return Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: AppTheme.successColor.withValues(alpha: 0.1),
+          color: (isCancel ? Colors.red : AppTheme.successColor).withOpacity(0.1),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppTheme.successColor.withValues(alpha: 0.2)),
+          border: Border.all(color: (isCancel ? Colors.red : AppTheme.successColor).withOpacity(0.2)),
         ),
-        child: const Row(
+        child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.lock_outline, color: AppTheme.successColor, size: 20),
-            SizedBox(width: 8),
+            Icon(isCancel ? Icons.cancel_outlined : Icons.lock_outline, color: isCancel ? Colors.red : AppTheme.successColor, size: 20),
+            const SizedBox(width: 8),
             Text(
-              "ARQUIVO HISTÓRICO CONCLUÍDO",
+              isCancel ? "VIAGEM CANCELADA" : "ARQUIVO HISTÓRICO CONCLUÍDO",
               style: TextStyle(
-                color: AppTheme.successColor,
+                color: isCancel ? Colors.red : AppTheme.successColor,
                 fontWeight: FontWeight.bold,
                 fontSize: 12,
               ),
@@ -392,7 +424,7 @@ class _MenuActionTile extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: Colors.grey[900]!.withValues(alpha: 0.5),
+            color: Colors.grey[900]!.withOpacity(0.5),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: Colors.white10),
           ),
@@ -401,7 +433,7 @@ class _MenuActionTile extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.1),
+                  color: color.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Icon(icon, color: color, size: 24),

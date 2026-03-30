@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:provider/provider.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:transferr/providers/auth_provider.dart';
 import 'package:transferr/widgets/app_drawer.dart';
 
 class SettingsPage extends StatefulWidget {
@@ -37,29 +38,31 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _logout() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final theme = Theme.of(context);
+    
     try {
-      await FirebaseAuth.instance.signOut();
+      // CORREÇÃO: Usar o AuthProvider em vez do FirebaseAuth direto
+      await context.read<AuthProvider>().logout();
+      
       if (mounted) {
-        Navigator.of(context).pushNamedAndRemoveUntil('/', (Route<dynamic> route) => false);
+        Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
       }
     } catch (e) {
       if (mounted) {
-        // 1. SnackBar de erro usa o tema
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.showSnackBar(
           SnackBar(
             content: Text('Erro ao fazer logout: $e'),
-            backgroundColor: Theme.of(context).colorScheme.error,
+            backgroundColor: theme.colorScheme.error,
           ),
         );
       }
     }
   }
 
-  // Widget auxiliar para os títulos de seção
   Widget _buildSectionTitle(BuildContext context, String title) {
     return Text(
       title,
-      // 2. Título da seção usa o tema
       style: Theme.of(context).textTheme.titleSmall?.copyWith(
         color: Theme.of(context).primaryColor,
         fontWeight: FontWeight.bold,
@@ -70,25 +73,22 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // O AppBar já é estilizado pelo tema
       appBar: AppBar(
         title: const Text('Configurações'),
-      ),drawer: const AppDrawer(),
+      ),
+      drawer: const AppDrawer(),
       body: ListView(
         padding: const EdgeInsets.all(16.0),
         children: [
-          // --- Seção Conta ---
           _buildSectionTitle(context, 'CONTA'),
           const Divider(height: 16, color: Colors.white24),
           ListTile(
-            // 3. O ListTile agora é totalmente controlado pelo listTileTheme
             leading: const Icon(Icons.logout),
             title: const Text('Sair (Logout)'),
             subtitle: const Text('Desconectar sua conta deste dispositivo'),
             onTap: () {
               showDialog(
                 context: context,
-                // 4. O AlertDialog agora é controlado pelo dialogTheme
                 builder: (BuildContext dialogContext) {
                   return AlertDialog(
                     title: const Text('Confirmar Saída'),
@@ -98,7 +98,6 @@ class _SettingsPageState extends State<SettingsPage> {
                         child: const Text('Cancelar'),
                         onPressed: () => Navigator.of(dialogContext).pop(),
                       ),
-                      // Botão com a cor de erro do tema
                       TextButton(
                         style: TextButton.styleFrom(
                           foregroundColor: Theme.of(context).colorScheme.error,
@@ -116,15 +115,12 @@ class _SettingsPageState extends State<SettingsPage> {
             },
           ),
           const SizedBox(height: 30),
-
-          // --- Seção Sobre ---
           _buildSectionTitle(context, 'SOBRE O APP'),
           const Divider(height: 16, color: Colors.white24),
           ListTile(
             leading: const Icon(Icons.info_outline),
             title: const Text('Versão do Aplicativo'),
             subtitle: Text(_appVersion),
-            onTap: null, // Desabilita o efeito de clique
           ),
         ],
       ),

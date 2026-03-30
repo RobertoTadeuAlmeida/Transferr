@@ -26,6 +26,12 @@ class _PendingCompanyPageState extends State<PendingCompanyPage> {
     });
   }
 
+  @override
+  void dispose() {
+    _companyNameController.dispose();
+    super.dispose();
+  }
+
   Future<void> _createCompany() async {
     final name = _companyNameController.text.trim();
     if (name.isEmpty) {
@@ -35,19 +41,23 @@ class _PendingCompanyPageState extends State<PendingCompanyPage> {
 
     setState(() => _isCreating = true);
     try {
-      await context.read<AuthProvider>().createCompany(name);
+      // O método createCompany no AuthProvider agora está alinhado com o AuthService
+      final auth = context.read<AuthProvider>();
+      // Certifique-se que o AuthProvider tenha esse método atualizado
+      await auth.createCompany(name);
     } catch (e) {
-      _showSnackBar(e.toString(), isError: true);
+      if (mounted) _showSnackBar(e.toString(), isError: true);
     } finally {
       if (mounted) setState(() => _isCreating = false);
     }
   }
 
   void _showSnackBar(String message, {bool isError = false}) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: isError ? AppTheme.errorColor : AppTheme.successColor,
+        backgroundColor: isError ? Colors.redAccent : Colors.green,
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -80,7 +90,7 @@ class _PendingCompanyPageState extends State<PendingCompanyPage> {
               child: Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  color: theme.primaryColor.withValues(alpha: 0.1),
+                  color: theme.primaryColor.withOpacity(0.1),
                   shape: BoxShape.circle,
                 ),
                 child: Icon(Icons.business_center_outlined, size: 64, color: theme.primaryColor),
@@ -93,14 +103,13 @@ class _PendingCompanyPageState extends State<PendingCompanyPage> {
               style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 12),
-            Text(
+            const Text(
               "Sua conta está pronta. Agora você precisa se vincular a uma empresa para começar.",
               textAlign: TextAlign.center,
-              style: theme.textTheme.bodyMedium?.copyWith(color: Colors.grey),
+              style: TextStyle(color: Colors.grey),
             ),
             const SizedBox(height: 48),
 
-            // SEÇÃO 1: CONVITES
             _buildSectionHeader(context, "CONVITES PENDENTES", Icons.mail_outline),
             const SizedBox(height: 16),
             if (userProvider.pendingInvites.isEmpty)
@@ -120,7 +129,6 @@ class _PendingCompanyPageState extends State<PendingCompanyPage> {
 
             const SizedBox(height: 48),
 
-            // SEÇÃO 2: CRIAR EMPRESA
             _buildSectionHeader(context, "SOU UM ORGANIZADOR", Icons.add_business_outlined),
             const SizedBox(height: 16),
             Card(
@@ -140,7 +148,6 @@ class _PendingCompanyPageState extends State<PendingCompanyPage> {
                       decoration: const InputDecoration(
                         labelText: "Nome Fantasia da Empresa",
                         prefixIcon: Icon(Icons.storefront_outlined),
-                        hintText: "Ex: Agência de Viagens Sol",
                       ),
                     ),
                     const SizedBox(height: 24),
@@ -149,7 +156,7 @@ class _PendingCompanyPageState extends State<PendingCompanyPage> {
                       child: ElevatedButton(
                         onPressed: _isCreating ? null : _createCompany,
                         child: _isCreating 
-                          ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2)) 
+                          ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) 
                           : const Text("CRIAR MINHA ORGANIZAÇÃO"),
                       ),
                     ),
@@ -186,13 +193,12 @@ class _PendingCompanyPageState extends State<PendingCompanyPage> {
     return Container(
       padding: const EdgeInsets.all(32),
       decoration: BoxDecoration(
-        color: AppTheme.cardColor,
+        color: Colors.white.withOpacity(0.05),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
       ),
       child: Column(
         children: [
-          Icon(Icons.hourglass_empty_rounded, color: Colors.grey.withValues(alpha: 0.3), size: 48),
+          Icon(Icons.hourglass_empty_rounded, color: Colors.grey.withOpacity(0.3), size: 48),
           const SizedBox(height: 16),
           Text(title, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white70)),
           const SizedBox(height: 8),
@@ -213,50 +219,36 @@ class _InviteCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final auth = context.read<AuthProvider>();
     final userProvider = context.read<UserProvider>();
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8.0),
-        child: ListTile(
-          leading: Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: AppTheme.successColor.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: const Icon(Icons.business_outlined, color: AppTheme.successColor),
+      child: ListTile(
+        leading: const Icon(Icons.business_outlined, color: Colors.green),
+        title: Text(invite['fromCompanyName'] ?? "Empresa"),
+        subtitle: const Text("Deseja convidar você para a equipe"),
+        trailing: ElevatedButton(
+          onPressed: () async {
+            try {
+              await userProvider.respondToInvite(
+                inviteId: invite['id'],
+                status: 'ACEITO',
+                currentUser: auth.currentUser!,
+                companyId: invite['fromCompanyId'],
+              );
+              await auth.refreshUser();
+            } catch (e) {
+              debugPrint("Erro ao aceitar convite: $e");
+            }
+          },
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.green,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
           ),
-          title: Text(invite['fromCompanyName'] ?? "Empresa"),
-          subtitle: const Text("Deseja convidar você para a equipe"),
-          trailing: ElevatedButton(
-            onPressed: () => _respond(context, userProvider, auth, 'aceito'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.successColor,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-            ),
-            child: const Text("ACEITAR"),
-          ),
+          child: const Text("ACEITAR"),
         ),
       ),
     );
-  }
-
-  void _respond(BuildContext context, UserProvider provider, AuthProvider auth, String status) async {
-    try {
-      await provider.respondToInvite(
-        inviteId: invite['id'],
-        status: status,
-        currentUser: auth.currentUser!,
-        companyId: invite['fromCompanyId'],
-      );
-      await auth.refreshUser();
-    } catch (e) {
-      debugPrint("Erro ao aceitar convite: $e");
-    }
   }
 }

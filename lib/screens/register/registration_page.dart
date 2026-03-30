@@ -83,9 +83,13 @@ class _RegistrationPageState extends State<RegistrationPage> {
   Future<void> _handleFinalSubmit() async {
     final provider = context.read<AuthProvider>();
 
+    // CORREÇÃO: Instanciação do User atualizada com os novos campos da arquitetura SaaS
     final user = User(
       id: '',
-      company: _controllers['company']!.text.trim(),
+      company: '', // Será gerado no AuthService.register
+      companyName: _controllers['company']!.text.trim(),
+      companies: [],
+      roles: {},
       name: _controllers['name']!.text.trim(),
       email: _controllers['email']!.text.trim(),
       phone: _controllers['phone']!.text,

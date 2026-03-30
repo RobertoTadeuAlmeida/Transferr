@@ -10,6 +10,8 @@ class UserRepository {
   final String _invitesCollection = 'convites';
 
   Stream<fb_auth.User?> get authStateChanges => _auth.authStateChanges();
+  
+  fb_auth.User? get currentUser => _auth.currentUser;
 
   CollectionReference<User> get _userRef => _firestore
       .collection(_collection)
@@ -18,13 +20,11 @@ class UserRepository {
         toFirestore: (user, _) => user.toMap(),
       );
 
-  // --- MÉTODOS DE AUTHENTICATION ---
   Future<fb_auth.UserCredential> signIn(String email, String password) async => await _auth.signInWithEmailAndPassword(email: email.trim(), password: password.trim());
   Future<fb_auth.UserCredential> signUp(String email, String password) async => await _auth.createUserWithEmailAndPassword(email: email.trim(), password: password.trim());
   Future<void> signOut() async => await _auth.signOut();
   Future<void> deleteAuthUser(fb_auth.User? user) async { if (user != null) await user.delete(); }
 
-  // --- MÉTODOS DE USUÁRIO ---
   Future<void> saveUserData(User user) async => await _userRef.doc(user.id).set(user, SetOptions(merge: true));
   
   Future<void> updateUserData(String uid, Map<String, dynamic> data) async {
@@ -52,17 +52,20 @@ class UserRepository {
     return snap.docs.isEmpty ? null : snap.docs.first.data();
   }
 
-  // --- MÉTODOS DE EQUIPE ---
+  /// Busca um usuário pelo documento (CPF/RG).
+  /// Útil para validações de unicidade.
+  Future<User?> getUserByDocument(String document) async {
+    final snap = await _userRef.where('documento', isEqualTo: document.trim()).limit(1).get();
+    return snap.docs.isEmpty ? null : snap.docs.first.data();
+  }
 
-  /// Retorna todos os usuários que fazem parte de uma empresa específica.
-  /// OTIMIZAÇÃO: Filtragem de isActive e Ordenação feitas na memória para evitar erros de Índice Composto e permissão.
   Stream<List<User>> getUsersStream(String companyId) => _userRef
       .where('empresas', arrayContains: companyId)
       .snapshots()
       .map((snapshot) {
         final list = snapshot.docs
             .map((doc) => doc.data())
-            .where((u) => u.isActive) // Filtro na memória
+            .where((u) => u.isActive)
             .toList();
             
         list.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
@@ -75,8 +78,6 @@ class UserRepository {
       'atualizadoEm': FieldValue.serverTimestamp(),
     });
   }
-
-  // --- SISTEMA DE CONVITES ---
 
   Future<void> sendInvite({
     required String fromCompanyId,
