@@ -15,8 +15,6 @@ class AuthService {
   Future<User?> getUserData(String uid) => _userRepo.getUserData(uid);
   Future<void> logout() => _userRepo.signOut();
 
-  /// Salva os dados do usuário delegando ao [UserService] para garantir
-  /// validações de documento único e sanitização.
   Future<void> saveUserData(User user) async {
     try {
       await _userService.saveUserData(user);
@@ -25,7 +23,6 @@ class AuthService {
     }
   }
 
-  /// Altera a empresa ativa do usuário.
   Future<void> switchActiveCompany(String uid, String newCompanyId) async {
     if (uid.isEmpty) throw "O ID do usuário não pode ser vazio.";
     try {
@@ -33,31 +30,29 @@ class AuthService {
       if (newCompanyId.isNotEmpty) {
         companyName = await _userRepo.getCompanyName(newCompanyId);
       }
-
       await _userRepo.updateUserData(uid, {
-        'empresa': newCompanyId,
-        'nomeEmpresa': companyName,
+        'company': newCompanyId,
+        'companyName': companyName,
       });
     } catch (e) {
       throw e.toString();
     }
   }
 
-  /// Transforma o usuário em um Proprietário (ADMIN), criando sua própria agência.
+  /// Transforma o usuário em Proprietário (OWNER) de sua própria agência (SaaS).
   Future<void> createOwnCompany(User user, String companyName) async {
     try {
       final String uid = user.id;
-
-      // Garante unicidade e imutabilidade dos papéis
-      final updatedCompanies = Set<String>.from(user.companies)..add(uid);
-      final updatedRoles = Map<String, String>.from(user.roles)..[uid] = 'ADMIN';
+      final Set<String> updatedCompanies = Set<String>.from(user.companies)..add(uid);
+      final Map<String, String> updatedRoles = Map.from(user.roles);
+      updatedRoles[uid] = 'OWNER';
 
       final updatedUser = user.copyWith(
         company: uid,
         companyName: companyName.trim(),
         companies: updatedCompanies.toList(),
         roles: updatedRoles,
-        profile: 'ADMIN',
+        profile: 'OWNER',
       );
 
       await _userService.saveUserData(updatedUser);
@@ -66,72 +61,72 @@ class AuthService {
     }
   }
 
-  /// Realiza o registro completo: Auth -> Validações de Domínio -> Firestore.
   Future<void> register(User user, String password) async {
     fb_auth.UserCredential? userCredential;
-    
     try {
-      await _userService.isDocumentUnique(user.document, '');
+      // 1. VALIDAÇÃO PREVENTIVA (Index do Firestore)
+      // Verifica CPF/CNPJ e E-mail antes de criar a conta no Auth
+      final docError = await _userService.validateDocumentUniqueness(user.document, '');
+      if (docError != null) throw docError;
 
-      userCredential = await _userRepo.signUp(user.email, password);
+      final emailError = await _userService.validateEmailUniqueness(user.email, '');
+      if (emailError != null) throw emailError;
+
+      // 2. Cria usuário no Firebase Auth
+      try {
+        userCredential = await _userRepo.signUp(user.email, password);
+        await userCredential.user?.reload();
+        await Future.delayed(const Duration(milliseconds: 500));
+      } on fb_auth.FirebaseAuthException catch (e) {
+        throw _handleAuthError(e);
+      }
+
       final String uid = userCredential.user!.uid;
-      
-      final bool isAdmin = user.profile.toUpperCase() == 'ADMIN';
-      
+
+      // 3. Define Perfil (OWNER se criar agência, AGENTE se for convite)
+      final bool isCreatingCompany = user.companyName.isNotEmpty && user.companyName != 'Aguardando Vínculo';
+
       final newUser = user.copyWith(
         id: uid,
-        company: isAdmin ? uid : '',
-        companyName: isAdmin ? user.company : 'Aguardando Vínculo',
-        companies: isAdmin ? [uid] : [],
-        roles: isAdmin ? {uid: 'ADMIN'} : {},
+        company: isCreatingCompany ? uid : '',
+        companyName: isCreatingCompany ? user.companyName : 'Aguardando Vínculo',
+        companies: isCreatingCompany ? [uid] : [],
+        roles: isCreatingCompany ? {uid: 'OWNER'} : {},
+        profile: isCreatingCompany ? 'OWNER' : 'AGENTE',
+        isActive: true,
+        createdAt: DateTime.now(),
       );
 
       try {
+        // 4. Salva no Firestore (Perfil + Índices de Unicidade)
         await _userService.saveUserData(newUser);
         await userCredential.user?.updateDisplayName(user.name);
       } catch (e) {
-        if (userCredential?.user != null) {
-          await _userRepo.deleteAuthUser(userCredential!.user);
-        }
-        throw e.toString();
+        // ROLLBACK: Se falhar no Firestore, remove do Auth para não deixar lixo
+        await _userRepo.deleteAuthUser(userCredential.user);
+        throw "Erro ao finalizar cadastro: $e";
       }
     } catch (e) {
-      throw e.toString();
+      rethrow;
     }
   }
 
-  /// Realiza o login e valida o estado da conta.
-  /// Se o usuário não tiver empresa (foi desligado), o login é permitido 
-  /// para que a UI possa exibir a mensagem correta (ex: "Aguardando Vínculo").
   Future<void> login(String email, String password) async {
     final cleanEmail = email.trim().toLowerCase();
-    
-    if (cleanEmail.isEmpty || password.trim().isEmpty) {
-      throw "E-mail e senha são obrigatórios.";
-    }
-
+    if (cleanEmail.isEmpty || password.trim().isEmpty) throw "E-mail e senha são obrigatórios.";
     try {
       final credential = await _userRepo.signIn(cleanEmail, password);
       final uid = credential.user?.uid;
-
       if (uid != null) {
         final userData = await _userRepo.getUserData(uid);
-        
-        // Regra 1: Usuário não existe no Firestore (Inconsistência)
         if (userData == null) {
           await logout();
-          throw "Perfil de usuário não encontrado. Entre em contato.";
+          throw "Perfil de usuário não encontrado.";
         }
-
-        // Regra 2: Bloqueio Global (Banido do App)
         if (!userData.isActive) {
           await logout();
           throw "Sua conta global está desativada.";
         }
-
-        // Regra 3: Se não tem empresa (foi desvinculado), o login CONTINUA.
-        // A UI deve tratar isso verificando se companies.isEmpty ou 
-        // se companyName == "Aguardando Vínculo".
       }
     } on fb_auth.FirebaseAuthException catch (e) {
       throw _handleAuthError(e);
@@ -140,14 +135,39 @@ class AuthService {
     }
   }
 
-  /// Centraliza as mensagens de erro do Firebase Auth
   String _handleAuthError(fb_auth.FirebaseAuthException e) {
     switch (e.code) {
       case 'user-not-found': return "E-mail não cadastrado.";
       case 'wrong-password': return "Senha incorreta.";
-      case 'user-disabled': return "Este usuário foi banido pelo Firebase.";
-      case 'invalid-email': return "Formato de e-mail inválido.";
+      case 'email-already-in-use': return "Este e-mail já está sendo usado por outra conta.";
+      case 'invalid-email': return "O formato do e-mail é inválido.";
+      case 'weak-password': return "A senha fornecida é muito fraca.";
       default: return "Erro ao entrar: ${e.message}";
+    }
+  }
+
+  Future<void> respondToInvite(String inviteId, String status, User currentUser, String companyId) async {
+    try {
+      await _userService.respondToInvite(
+        inviteId: inviteId,
+        status: status,
+        currentUser: currentUser,
+        companyId: companyId,
+      );
+    } catch (e) {
+      throw e.toString();
+    }
+  }
+
+  Future<void> transferOwnership(User currentOwner, String targetUserId, String companyId) async {
+    try {
+      await _userService.transferOwnership(
+        currentOwner: currentOwner,
+        targetUserId: targetUserId,
+        companyId: companyId,
+      );
+    } catch (e) {
+      throw e.toString();
     }
   }
 }

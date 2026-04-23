@@ -17,7 +17,6 @@ class UserProvider with ChangeNotifier {
   String? _currentCompanyId;
   String? _currentInviteUserId;
 
-  // Injeção de dependência limpa
   UserProvider(this._service);
 
   List<User> get users => _searchTerm.isEmpty ? _allUsers : _filteredUsers;
@@ -105,6 +104,82 @@ class UserProvider with ChangeNotifier {
       }
     });
   }
+
+  // ===========================================================================
+  // GESTÃO DE EQUIPE (Ações de Admin/Owner)
+  // ===========================================================================
+
+  /// Altera o papel de um membro (Agente <-> Admin).
+  Future<void> updateMemberRole({
+    required User operator,
+    required String targetUserId,
+    required String companyId,
+    required String newRole,
+  }) async {
+    _setLoading(true);
+    _error = null;
+    try {
+      await _service.updateMemberRole(
+        operator: operator,
+        targetUserId: targetUserId,
+        companyId: companyId,
+        newRole: newRole,
+      );
+    } catch (e) {
+      _error = e.toString();
+      rethrow;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  /// Remove um membro da empresa (Expulsão).
+  Future<void> removeMember({
+    required User operator,
+    required String targetUserId,
+    required String companyId,
+  }) async {
+    _setLoading(true);
+    _error = null;
+    try {
+      await _service.removeMemberFromCompany(
+        operator: operator,
+        targetUserId: targetUserId,
+        companyId: companyId,
+      );
+    } catch (e) {
+      _error = e.toString();
+      rethrow;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  /// Passa a titularidade da empresa para outro usuário.
+  Future<void> transferOwnership({
+    required User currentOwner,
+    required String targetUserId,
+    required String companyId,
+  }) async {
+    _setLoading(true);
+    _error = null;
+    try {
+      await _service.transferOwnership(
+        currentOwner: currentOwner,
+        targetUserId: targetUserId,
+        companyId: companyId,
+      );
+    } catch (e) {
+      _error = e.toString();
+      rethrow;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  // ===========================================================================
+  // CONVITES E CADASTRO
+  // ===========================================================================
 
   Future<User?> findUserByEmail(String email) => _service.findUserByEmail(email);
 

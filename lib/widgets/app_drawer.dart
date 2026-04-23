@@ -8,17 +8,17 @@ class AppDrawer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Usamos select para reconstruir apenas se o currentUser mudar
     final authProvider = context.watch<AuthProvider>();
     final user = authProvider.currentUser;
+    final isAdmin = authProvider.isAdmin;
 
     return Drawer(
       backgroundColor: AppTheme.scaffoldBackgroundColor,
       child: Column(
         children: [
           UserAccountsDrawerHeader(
-            decoration: const BoxDecoration(
-              color: AppTheme.primaryColor,
-            ),
+            decoration: const BoxDecoration(color: AppTheme.primaryColor),
             currentAccountPicture: CircleAvatar(
               backgroundColor: Colors.white,
               child: Text(
@@ -43,24 +43,26 @@ class AppDrawer extends StatelessWidget {
             label: 'Base de Passageiros',
             onTap: () => Navigator.pushReplacementNamed(context, '/global-passengers'),
           ),
-          _DrawerItem(
-            icon: Icons.analytics_outlined,
-            label: 'Financeiro Geral',
-            onTap: () => Navigator.pushReplacementNamed(context, '/finance'),
-          ),
-          
-          const Divider(color: Colors.white10, height: 32),
-          
-          _DrawerItem(
-            icon: Icons.business_outlined,
-            label: 'Minha Empresa',
-            onTap: () => Navigator.pushNamed(context, '/my-company'),
-          ),
-          _DrawerItem(
-            icon: Icons.group_add_outlined,
-            label: 'Gestão de Equipe',
-            onTap: () => Navigator.pushNamed(context, '/users'),
-          ),
+
+          // Itens visíveis apenas para Administradores ou Donos
+          if (isAdmin) ...[
+            const Divider(color: Colors.white10, height: 32),
+            _DrawerItem(
+              icon: Icons.analytics_outlined,
+              label: 'Financeiro Geral',
+              onTap: () => Navigator.pushReplacementNamed(context, '/finance'),
+            ),
+            _DrawerItem(
+              icon: Icons.business_outlined,
+              label: 'Minha Empresa',
+              onTap: () => Navigator.pushNamed(context, '/my-company'),
+            ),
+            _DrawerItem(
+              icon: Icons.group_add_outlined,
+              label: 'Gestão de Equipe',
+              onTap: () => Navigator.pushNamed(context, '/users'),
+            ),
+          ],
 
           const Spacer(),
           
@@ -111,8 +113,6 @@ class _DrawerItem extends StatelessWidget {
         ),
       ),
       onTap: onTap,
-      hoverColor: Colors.white.withValues(alpha: 0.05),
-      splashColor: (color ?? AppTheme.primaryColor).withValues(alpha: 0.1),
     );
   }
 }

@@ -18,90 +18,177 @@ void main() {
 
   setUp(() {
     mockService = MockUserService();
-    // CORREÇÃO: Removido o parâmetro nomeado 'service:'
     userProvider = UserProvider(mockService);
   });
 
-  group('UserProvider Tests', () {
-    
-    test('initial state should be empty and not loading', () {
-      expect(userProvider.users, isEmpty);
-      expect(userProvider.isLoading, isFalse);
-      expect(userProvider.error, isNull);
-    });
+  final tUser = User(
+    id: 'u1',
+    name: 'João Teste',
+    email: 'joao@test.com',
+    phone: '11999999999',
+    document: '123',
+    birthDate: DateTime(1990, 1, 1),
+    zipCode: '01001000',
+    address: 'Rua A',
+    number: '1',
+    neighborhood: 'Centro',
+    city: 'SP',
+    state: 'SP',
+    company: 'emp_1',
+    companies: ['emp_1'],
+    roles: {'emp_1': 'OWNER'},
+    profile: 'OWNER',
+    createdAt: DateTime.now(),
+  );
 
-    test('clearData should reset everything and cancel subscriptions', () {
-      userProvider.searchUsers('teste');
-      userProvider.clearData();
-
-      expect(userProvider.users, isEmpty);
-      expect(userProvider.error, isNull);
-      expect(userProvider.isLoading, isFalse);
-    });
-
-    test('searchUsers should filter existing list in memory', () async {
-      final users = [
-        User(id: '1', name: 'Alice', email: 'alice@test.com', company: '', companies: [], roles: {}, phone: '', document: '', birthDate: DateTime.now(), zipCode: '', address: '', number: '', neighborhood: '', city: '', state: '', createdAt: DateTime.now()),
-        User(id: '2', name: 'Bob', email: 'bob@test.com', company: '', companies: [], roles: {}, phone: '', document: '', birthDate: DateTime.now(), zipCode: '', address: '', number: '', neighborhood: '', city: '', state: '', createdAt: DateTime.now()),
-      ];
-      
+  group('UserProvider - Streams e Sincronização', () {
+    test('initCompanyStream não deve reiniciar se o ID da empresa for o mesmo', () {
       final controller = StreamController<List<User>>();
       when(() => mockService.getUsersStream(any())).thenAnswer((_) => controller.stream);
 
-      userProvider.initCompanyStream('empresa_1');
-      controller.add(users);
+      userProvider.initCompanyStream('emp_1');
+      userProvider.initCompanyStream('emp_1'); // Chamada repetida
 
-      await Future.delayed(Duration.zero);
-      
-      userProvider.searchUsers('ali');
-      expect(userProvider.users.length, 1);
-      expect(userProvider.users.first.name, 'Alice');
-
-      userProvider.searchUsers(''); 
-      expect(userProvider.users.length, 2);
-      
-      await controller.close();
+      verify(() => mockService.getUsersStream('emp_1')).called(1); 
+      controller.close();
     });
 
-    test('sendInvite should set loading true and handle errors', () async {
+    test('initInviteStream deve atualizar a lista de convites reativamente', () async {
+      final inviteController = StreamController<List<Map<String, dynamic>>>();
+      final tInvites = [{'id': 'inv1', 'fromCompanyName': 'Agência X'}];
+      
+      when(() => mockService.getPendingInvites(any())).thenAnswer((_) => inviteController.stream);
+
+      userProvider.initInviteStream('u1');
+      inviteController.add(tInvites);
+
+      await Future.delayed(Duration.zero);
+
+      expect(userProvider.pendingInvites, tInvites);
+      inviteController.close();
+    });
+  });
+
+  group('UserProvider - Gestão de Equipe (Multi-tenant)', () {
+    test('updateMemberRole deve gerenciar loading e erro e limpar erro anterior', () async {
+      // Mock para o erro anterior
+      when(() => mockService.removeMemberFromCompany(
+        operator: any(named: 'operator'),
+        targetUserId: any(named: 'targetUserId'),
+        companyId: any(named: 'companyId'),
+      )).thenAnswer((_) async => throw 'Erro Anterior');
+
+      // CORREÇÃO: Usando thenAnswer com async throw para testar o loading
+      when(() => mockService.updateMemberRole(
+        operator: any(named: 'operator'),
+        targetUserId: any(named: 'targetUserId'),
+        companyId: any(named: 'companyId'),
+        newRole: any(named: 'newRole'),
+      )).thenAnswer((_) async => throw 'Acesso Negado');
+
+      // 1. Forçamos um erro anterior
+      try { await userProvider.removeMember(operator: tUser, targetUserId: 'x', companyId: 'y'); } catch (_) {}
+      expect(userProvider.error, 'Erro Anterior');
+      
+      // 2. Disparamos a nova ação
+      final call = userProvider.updateMemberRole(
+        operator: tUser,
+        targetUserId: 'u2',
+        companyId: 'emp_1',
+        newRole: 'ADMIN',
+      );
+
+      expect(userProvider.isLoading, isTrue);
+      expect(userProvider.error, isNull); // Deve ter limpado ao iniciar
+      
+      try { await call; } catch (_) {}
+
+      expect(userProvider.isLoading, isFalse);
+      expect(userProvider.error, 'Acesso Negado');
+    });
+
+    test('transferOwnership deve delegar para o serviço com sucesso', () async {
+      when(() => mockService.transferOwnership(
+        currentOwner: any(named: 'currentOwner'),
+        targetUserId: any(named: 'targetUserId'),
+        companyId: any(named: 'companyId'),
+      )).thenAnswer((_) async => {});
+
+      await userProvider.transferOwnership(currentOwner: tUser, targetUserId: 'u2', companyId: 'emp_1');
+
+      verify(() => mockService.transferOwnership(
+        currentOwner: tUser,
+        targetUserId: 'u2',
+        companyId: 'emp_1',
+      )).called(1);
+    });
+  });
+
+  group('UserProvider - Convites e Ações Diretas', () {
+    test('sendInvite deve gerenciar fluxo completo', () async {
       when(() => mockService.sendInvite(
         fromCompanyId: any(named: 'fromCompanyId'),
         fromCompanyName: any(named: 'fromCompanyName'),
         toUserEmail: any(named: 'toUserEmail'),
         currentUserId: any(named: 'currentUserId'),
-      )).thenThrow(Exception('E-mail inválido'));
+      )).thenAnswer((_) async => {});
 
-      expect(userProvider.isLoading, isFalse);
-      
-      try {
-        await userProvider.sendInvite(
-          fromCompanyId: '1',
-          fromCompanyName: 'A',
-          toUserEmail: 'erro@email.com',
-          currentUserId: '9',
-        );
-      } catch (_) {}
+      await userProvider.sendInvite(
+        fromCompanyId: 'emp_1',
+        fromCompanyName: 'Agência',
+        toUserEmail: 'alvo@test.com',
+        currentUserId: 'u1',
+      );
 
-      expect(userProvider.isLoading, isFalse);
-      expect(userProvider.error, contains('E-mail inválido'));
+      verify(() => mockService.sendInvite(
+        fromCompanyId: 'emp_1',
+        fromCompanyName: 'Agência',
+        toUserEmail: 'alvo@test.com',
+        currentUserId: 'u1',
+      )).called(1);
     });
 
-    test('initInviteStream should populate pendingInvites', () async {
-      final mockInvites = [
-        {'id': 'inv_1', 'fromCompanyName': 'Empresa A'},
-      ];
-      final controller = StreamController<List<Map<String, dynamic>>>();
-      
-      when(() => mockService.getPendingInvites(any())).thenAnswer((_) => controller.stream);
+    test('toggleUserStatus deve alternar o status corretamente', () async {
+      when(() => mockService.toggleUserStatus(any(), any())).thenAnswer((_) async => {});
 
-      userProvider.initInviteStream('user_123');
-      controller.add(mockInvites);
+      await userProvider.toggleUserStatus('u2', true); // Se atual é true, envia false
 
-      await Future.microtask(() {});
-      expect(userProvider.pendingInvites.length, 1);
-      expect(userProvider.pendingInvites.first['fromCompanyName'], 'Empresa A');
+      verify(() => mockService.toggleUserStatus('u2', false)).called(1);
+    });
+  });
+
+  group('UserProvider - Busca e Limpeza', () {
+    test('searchUsers deve filtrar a lista corretamente (case-insensitive)', () async {
+      final controller = StreamController<List<User>>();
+      when(() => mockService.getUsersStream(any())).thenAnswer((_) => controller.stream);
       
-      await controller.close();
+      userProvider.initCompanyStream('emp_1');
+      controller.add([
+        tUser.copyWith(id: '1', name: 'Marcos Silva'),
+        tUser.copyWith(id: '2', name: 'Ana Souza'),
+      ]);
+
+      await Future.delayed(Duration.zero);
+      
+      userProvider.searchUsers('SILVA');
+      expect(userProvider.users.length, 1);
+      expect(userProvider.users.first.name, 'Marcos Silva');
+      
+      controller.close();
+    });
+
+    test('clearData deve resetar completamente o estado e cancelar subscrições', () {
+      final userController = StreamController<List<User>>();
+      when(() => mockService.getUsersStream(any())).thenAnswer((_) => userController.stream);
+      
+      userProvider.initCompanyStream('emp_1');
+      userProvider.clearData();
+
+      expect(userProvider.users, isEmpty);
+      expect(userProvider.pendingInvites, isEmpty);
+      expect(userProvider.error, isNull);
+      
+      userController.close();
     });
   });
 }

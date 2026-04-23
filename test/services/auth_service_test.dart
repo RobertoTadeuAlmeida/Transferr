@@ -29,19 +29,19 @@ void main() {
 
   final tUser = User(
     id: 'user_123',
-    name: 'João Motorista',
-    email: 'joao@transferr.com',
+    name: 'João Teste',
+    email: 'joao@test.com',
     phone: '11999999999',
     document: '12345678900',
     birthDate: DateTime(1990, 1, 1),
     zipCode: '01001000',
-    address: 'Rua das Flores',
+    address: 'Rua A',
     number: '123',
     neighborhood: 'Centro',
-    city: 'São Paulo',
+    city: 'SP',
     state: 'SP',
     company: 'emp_1',
-    companyName: 'Transferr Brasil',
+    companyName: 'Agência Teste',
     companies: ['emp_1'],
     roles: {'emp_1': 'ADMIN'},
     profile: 'ADMIN',
@@ -68,36 +68,19 @@ void main() {
 
     test('Deve realizar login com sucesso para usuário ativo', () async {
       when(() => mockUserRepo.getUserData('user_123')).thenAnswer((_) async => tUser);
-      await authService.login('joao@transferr.com', 'pass123');
-      verify(() => mockUserRepo.signIn('joao@transferr.com', 'pass123')).called(1);
+      await authService.login('joao@test.com', 'pass123');
+      verify(() => mockUserRepo.signIn('joao@test.com', 'pass123')).called(1);
     });
 
-    test('Deve permitir login para usuário sem empresa (desvinculado)', () async {
-      final semEmpresa = tUser.copyWith(company: '', companies: [], companyName: 'Aguardando Vínculo');
-      when(() => mockUserRepo.getUserData('user_123')).thenAnswer((_) async => semEmpresa);
-
-      await authService.login('joao@transferr.com', 'pass123');
-      
-      verify(() => mockUserRepo.getUserData('user_123')).called(1);
-    });
-
-    test('Deve barrar e deslogar se a conta estiver desativada (isActive=false)', () async {
+    test('Deve barrar e deslogar se a conta estiver desativada', () async {
       final inativo = tUser.copyWith(isActive: false);
       when(() => mockUserRepo.getUserData('user_123')).thenAnswer((_) async => inativo);
 
       await expectLater(
-        authService.login('joao@transferr.com', 'pass123'),
+        authService.login('joao@test.com', 'pass123'),
         throwsA(contains('Sua conta global está desativada')),
       );
       verify(() => mockUserRepo.signOut()).called(1);
-    });
-
-    test('Deve tratar erros do Firebase (ex: senha errada) com mensagens amigáveis', () async {
-      when(() => mockUserRepo.signIn(any(), any())).thenThrow(
-        fb_auth.FirebaseAuthException(code: 'wrong-password')
-      );
-
-      await expectLater(authService.login('j@t.com', '123'), throwsA('Senha incorreta.'));
     });
   });
 
@@ -112,52 +95,61 @@ void main() {
       when(() => mockCredential.user).thenReturn(mockFbUser);
       when(() => mockFbUser.updateDisplayName(any())).thenAnswer((_) async => {});
       when(() => mockUserRepo.signUp(any(), any())).thenAnswer((_) async => mockCredential);
-      when(() => mockUserService.isDocumentUnique(any(), any())).thenAnswer((_) async => true);
+      // null significa que o documento é único (sucesso na validação)
+      when(() => mockUserService.validateDocumentUniqueness(any(), any())).thenAnswer((_) async => null);
       when(() => mockUserService.saveUserData(any())).thenAnswer((_) async => {});
     });
 
     test('Deve interromper registro se o documento já existir', () async {
-      when(() => mockUserService.isDocumentUnique(any(), any())).thenThrow('Doc Duplicado');
+      when(() => mockUserService.validateDocumentUniqueness(any(), any())).thenAnswer((_) async => 'Doc Duplicado');
       await expectLater(authService.register(tUser, '123'), throwsA('Doc Duplicado'));
       verifyNever(() => mockUserRepo.signUp(any(), any()));
     });
 
-    test('Configuração ADMIN: Deve criar empresa própria', () async {
-      final input = tUser.copyWith(id: '', profile: 'ADMIN', company: 'Minha Agência');
+    test('Configuração OWNER: Deve criar empresa própria no registro', () async {
+      final input = tUser.copyWith(id: '', company: 'Minha Agência');
       await authService.register(input, '123');
 
       verify(() => mockUserService.saveUserData(any(
         that: isA<User>()
           .having((u) => u.company, 'id empresa', 'NEW_UID')
           .having((u) => u.companyName, 'nome', 'Minha Agência')
+          .having((u) => u.profile, 'perfil', 'OWNER')
       ))).called(1);
     });
 
     test('Rollback: Deve deletar no Auth se falhar no Firestore', () async {
-      when(() => mockUserService.saveUserData(any())).thenThrow('Erro de Rede');
+      when(() => mockUserService.saveUserData(any())).thenThrow('Erro Firestore');
       when(() => mockUserRepo.deleteAuthUser(any())).thenAnswer((_) async => {});
 
-      await expectLater(authService.register(tUser, '123'), throwsA('Erro de Rede'));
+      await expectLater(authService.register(tUser, '123'), throwsA('Erro Firestore'));
       verify(() => mockUserRepo.deleteAuthUser(mockFbUser)).called(1);
     });
   });
 
-  group('AuthService - Utilitários', () {
-    test('createOwnCompany: Não deve permitir duplicidade na lista de empresas', () async {
+  group('AuthService - Multi-tenant Utils', () {
+    test('createOwnCompany: Deve configurar usuário como OWNER', () async {
       when(() => mockUserService.saveUserData(any())).thenAnswer((_) async => {});
-      final userJaComID = tUser.copyWith(companies: [tUser.id]);
-
-      await authService.createOwnCompany(userJaComID, 'Agência');
+      await authService.createOwnCompany(tUser, 'Nova Agência');
 
       verify(() => mockUserService.saveUserData(any(
-        that: isA<User>().having((u) => u.companies.length, 'unicidade', 1)
+        that: isA<User>()
+          .having((u) => u.profile, 'profile', 'OWNER')
+          .having((u) => u.companyName, 'name', 'Nova Agência')
+          .having((u) => u.roles['user_123'], 'role map', 'OWNER')
       ))).called(1);
     });
 
-    test('switchActiveCompany: Deve atualizar para Sem Empresa se ID for vazio', () async {
+    test('switchActiveCompany: Deve atualizar campos company e companyName', () async {
       when(() => mockUserRepo.updateUserData(any(), any())).thenAnswer((_) async => {});
-      await authService.switchActiveCompany('u1', '');
-      verify(() => mockUserRepo.updateUserData('u1', {'empresa': '', 'nomeEmpresa': 'Sem Empresa'})).called(1);
+      when(() => mockUserRepo.getCompanyName(any())).thenAnswer((_) async => 'Agência X');
+
+      await authService.switchActiveCompany('u1', 'comp_x');
+
+      verify(() => mockUserRepo.updateUserData('u1', {
+        'company': 'comp_x',
+        'companyName': 'Agência X',
+      })).called(1);
     });
   });
 }

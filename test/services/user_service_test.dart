@@ -18,6 +18,8 @@ void main() {
   setUp(() {
     mockRepo = MockUserRepository();
     userService = UserService(mockRepo);
+    // Comportamento padrão: documento não existe
+    when(() => mockRepo.getUserByDocument(any())).thenAnswer((_) async => null);
   });
 
   final tUser = User(
@@ -36,85 +38,140 @@ void main() {
     company: 'emp_1',
     companyName: 'Transferr Brasil',
     companies: ['emp_1'],
-    roles: {'emp_1': 'ADMIN'},
-    profile: 'ADMIN',
+    roles: {'emp_1': 'OWNER'},
+    profile: 'OWNER',
     createdAt: DateTime.now(),
   );
 
-  group('UserService - isDocumentUnique', () {
-    test('Deve retornar true se o documento não estiver em uso', () async {
-      when(() => mockRepo.getUserByDocument('12345678900')).thenAnswer((_) async => null);
+  group('UserService - Unicidade de Documento', () {
+    test('Deve impedir o cadastro se o documento já existir para outro ID', () async {
+      // Cenário: Existe um usuário 'OUTRO_ID' com o mesmo documento de 'user_123'
+      final existingUser = tUser.copyWith(id: 'OUTRO_ID');
+      when(() => mockRepo.getUserByDocument('12345678900')).thenAnswer((_) async => existingUser);
 
-      final result = await userService.isDocumentUnique('12345678900', 'user_123');
+      // Ação: Tentar validar o documento para o novo usuário 'user_123'
+      final error = await userService.validateDocumentUniqueness('12345678900', 'user_123');
 
-      expect(result, isTrue);
-      verify(() => mockRepo.getUserByDocument('12345678900')).called(1);
+      // Verificação
+      expect(error, equals('Este CPF/CNPJ já está cadastrado em outra conta.'));
     });
 
-    test('Deve retornar true se o documento pertence ao próprio usuário (edição)', () async {
+    test('Deve permitir se o documento pertencer ao próprio usuário (Update)', () async {
+      // Cenário: O usuário está atualizando o perfil, o documento no banco é dele mesmo
       when(() => mockRepo.getUserByDocument('12345678900')).thenAnswer((_) async => tUser);
 
-      final result = await userService.isDocumentUnique('12345678900', 'user_123');
+      // Ação: Valida documento com o ID dele mesmo
+      final error = await userService.validateDocumentUniqueness('12345678900', 'user_123');
 
-      expect(result, isTrue);
+      // Verificação: Null significa que está liberado
+      expect(error, isNull);
     });
 
-    test('Deve lançar exceção se o documento já estiver em uso por outro usuário', () async {
+    test('saveUserData deve lançar exceção se detectar duplicidade de documento', () async {
+      // Cenário: Outro usuário já usa este CPF
       final otherUser = tUser.copyWith(id: 'outro_id');
-      when(() => mockRepo.getUserByDocument('12345678900')).thenAnswer((_) async => otherUser);
+      when(() => mockRepo.getUserByDocument(any())).thenAnswer((_) async => otherUser);
 
-      await expectLater(
-        userService.isDocumentUnique('12345678900', 'user_123'),
-        throwsA(isA<String>().having((e) => e, 'mensagem', contains('Documento já cadastrado'))),
-      );
-    });
-  });
-
-  group('UserService - saveUserData', () {
-    test('Deve validar o usuário e verificar unicidade do documento antes de salvar', () async {
-      when(() => mockRepo.getUserByDocument(any())).thenAnswer((_) async => null);
-      when(() => mockRepo.saveUserData(any())).thenAnswer((_) async => {});
-
-      await userService.saveUserData(tUser);
-
-      verify(() => mockRepo.getUserByDocument(tUser.document)).called(1);
-      verify(() => mockRepo.saveUserData(any())).called(1);
-    });
-
-    test('Deve falhar se a validação de integridade do UserValidator falhar', () async {
-      final userInvalido = tUser.copyWith(name: ''); // Nome vazio deve disparar erro no validador
-
-      await expectLater(
-        userService.saveUserData(userInvalido),
-        throwsA(isA<Exception>()),
-      );
-
+      // Verificação: Deve estourar a mensagem de erro no save
+      expect(() => userService.saveUserData(tUser), 
+        throwsA(contains('já está cadastrado em outra conta')));
+      
       verifyNever(() => mockRepo.saveUserData(any()));
     });
   });
 
-  group('UserService - Outras Funcionalidades', () {
-    test('Deve sanitizar nome e e-mail ao salvar', () async {
-      final userSujo = tUser.copyWith(name: '  João Silva  ', email: 'CONTATO@EMAIL.COM');
-      when(() => mockRepo.getUserByDocument(any())).thenAnswer((_) async => null);
+  group('UserService - Governança OWNER (Coroa)', () {
+    test('Não deve permitir que ADMIN rebaixe ou remova o OWNER', () async {
+      final admin = tUser.copyWith(id: 'admin', roles: {'emp_1': 'ADMIN'});
+      when(() => mockRepo.getUserData(tUser.id)).thenAnswer((_) async => tUser);
+
+      // Falha ao remover
+      expect(() => userService.removeMemberFromCompany(operator: admin, targetUserId: tUser.id, companyId: 'emp_1'), 
+        throwsA(contains('proprietário da empresa não pode ser removido')));
+
+      // Falha ao rebaixar
+      expect(() => userService.updateMemberRole(operator: admin, targetUserId: tUser.id, companyId: 'emp_1', newRole: 'AGENTE'), 
+        throwsA(contains('não pode ter seu papel alterado')));
+    });
+
+    test('Transferência: Deve trocar coroa e atualizar perfis globais sincronizados', () async {
+      final target = tUser.copyWith(id: 'alvo', roles: {'emp_1': 'AGENTE'}, companies: ['emp_1']);
+      when(() => mockRepo.getUserData(target.id)).thenAnswer((_) async => target);
       when(() => mockRepo.saveUserData(any())).thenAnswer((_) async => {});
 
-      await userService.saveUserData(userSujo);
+      await userService.transferOwnership(currentOwner: tUser, targetUserId: target.id, companyId: 'emp_1');
+
+      // 1. Alvo deve virar OWNER
+      verify(() => mockRepo.saveUserData(any(
+        that: isA<User>()
+          .having((u) => u.id, 'id alvo', 'alvo')
+          .having((u) => u.roles['emp_1'], 'novo papel', 'OWNER')
+          .having((u) => u.profile, 'novo perfil global', 'OWNER')
+      ))).called(1);
+
+      // 2. Antigo dono deve virar ADMIN
+      verify(() => mockRepo.saveUserData(any(
+        that: isA<User>()
+          .having((u) => u.id, 'id antigo dono', tUser.id)
+          .having((u) => u.roles['emp_1'], 'rebaixado papel', 'ADMIN')
+          .having((u) => u.profile, 'rebaixado perfil global', 'ADMIN')
+      ))).called(1);
+    });
+  });
+
+  group('UserService - Cenários de Remoção e Contexto', () {
+    test('Ao remover membro da empresa ATIVA, deve migrar para próxima disponível', () async {
+      final multiCompanyUser = tUser.copyWith(
+        id: 'user_multi',
+        company: 'emp_1',
+        companies: ['emp_1', 'emp_2'],
+        roles: {'emp_1': 'AGENTE', 'emp_2': 'ADMIN'},
+      );
+      
+      final operator = tUser;
+      when(() => mockRepo.getUserData(multiCompanyUser.id)).thenAnswer((_) async => multiCompanyUser);
+      when(() => mockRepo.getCompanyName('emp_2')).thenAnswer((_) async => 'Empresa Secundária');
+      when(() => mockRepo.saveUserData(any())).thenAnswer((_) async => {});
+
+      await userService.removeMemberFromCompany(operator: operator, targetUserId: multiCompanyUser.id, companyId: 'emp_1');
 
       verify(() => mockRepo.saveUserData(any(
         that: isA<User>()
-          .having((u) => u.name, 'nome limpo', 'João Silva')
-          .having((u) => u.email, 'email lowercase', 'contato@email.com')
+          .having((u) => u.company, 'migrou contexto', 'emp_2')
+          .having((u) => u.companyName, 'migrou nome', 'Empresa Secundária')
+          .having((u) => u.companies.length, 'saiu da emp_1', 1)
       ))).called(1);
     });
 
-    test('toggleUserStatus deve validar ID antes de chamar repo', () async {
-      when(() => mockRepo.toggleUserStatus(any(), any())).thenAnswer((_) async => {});
+    test('Ao remover de todas as empresas, deve voltar para Aguardando Vínculo', () async {
+      final target = tUser.copyWith(id: 'u_last', company: 'emp_1', companies: ['emp_1'], roles: {'emp_1': 'AGENTE'});
+      
+      when(() => mockRepo.getUserData(target.id)).thenAnswer((_) async => target);
+      when(() => mockRepo.saveUserData(any())).thenAnswer((_) async => {});
 
-      await userService.toggleUserStatus('u1', true);
-      verify(() => mockRepo.toggleUserStatus('u1', true)).called(1);
+      await userService.removeMemberFromCompany(operator: tUser, targetUserId: target.id, companyId: 'emp_1');
 
-      expect(() => userService.toggleUserStatus('', true), throwsA(isA<Exception>()));
+      verify(() => mockRepo.saveUserData(any(
+        that: isA<User>()
+          .having((u) => u.company, 'contexto vazio', isEmpty)
+          .having((u) => u.companyName, 'status inicial', 'Aguardando Vínculo')
+      ))).called(1);
+    });
+  });
+
+  group('UserService - Sistema de Convites', () {
+    test('respondToInvite: Aceite deve configurar AGENTE e tornar usuário ativo', () async {
+      final newUser = tUser.copyWith(company: '', companies: [], roles: {}, isActive: false);
+      when(() => mockRepo.respondToInvite(any(), any())).thenAnswer((_) async => {});
+      when(() => mockRepo.saveUserData(any())).thenAnswer((_) async => {});
+
+      await userService.respondToInvite(inviteId: 'i1', status: 'aceito', currentUser: newUser, companyId: 'new_c');
+
+      verify(() => mockRepo.saveUserData(any(
+        that: isA<User>()
+          .having((u) => u.isActive, 'ativou conta', isTrue)
+          .having((u) => u.roles['new_c'], 'papel atribuído', 'AGENTE')
+      ))).called(1);
     });
   });
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:transferr/config/theme/app_theme.dart';
 import '../../providers/auth_provider.dart';
 import '../../models/user.dart';
 import 'widgets/personal_info_step.dart';
@@ -47,17 +48,35 @@ class _RegistrationPageState extends State<RegistrationPage> {
     super.dispose();
   }
 
-  void _nextPage() {
-    if (_validateCurrentStep()) {
-      if (_currentStep < 2) {
-        _pageController.nextPage(
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeInOut,
-        );
-        setState(() => _currentStep++);
-      } else {
-        _handleFinalSubmit();
+  Future<void> _nextPage() async {
+    final provider = context.read<AuthProvider>();
+
+    // Validação básica do formulário atual
+    if (!_validateCurrentStep()) {
+      _showErrorSnackBar("Por favor, preencha os campos obrigatórios corretamente.");
+      return;
+    }
+
+    // Validação Extra: Se estiver no passo 1, validar documento no Firebase antes de avançar
+    if (_currentStep == 0) {
+      final String doc = _controllers['document']!.text;
+      
+      // Validação assíncrona de unicidade
+      final String? error = await provider.validateDocument(doc);
+      if (error != null) {
+        _showErrorSnackBar(error);
+        return; // BLOQUEIA O AVANÇO
       }
+    }
+
+    if (_currentStep < 2) {
+      _pageController.nextPage(
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
+      setState(() => _currentStep++);
+    } else {
+      _handleFinalSubmit();
     }
   }
 
@@ -80,13 +99,30 @@ class _RegistrationPageState extends State<RegistrationPage> {
     return false;
   }
 
+  void _showErrorSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.warning_amber_rounded, color: Colors.white),
+            const SizedBox(width: 12),
+            Expanded(child: Text(message)),
+          ],
+        ),
+        backgroundColor: AppTheme.errorColor, // Cor de atenção amigável
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 4),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+    );
+  }
+
   Future<void> _handleFinalSubmit() async {
     final provider = context.read<AuthProvider>();
 
-    // CORREÇÃO: Instanciação do User atualizada com os novos campos da arquitetura SaaS
     final user = User(
       id: '',
-      company: '', // Será gerado no AuthService.register
+      company: '', 
       companyName: _controllers['company']!.text.trim(),
       companies: [],
       roles: {},
@@ -145,7 +181,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
         children: [
           LinearProgressIndicator(
             value: (_currentStep + 1) / 3,
-            backgroundColor: theme.primaryColor.withValues(alpha: 0.1),
+            backgroundColor: theme.primaryColor.withAlpha(25),
             minHeight: 6,
           ),
           Expanded(

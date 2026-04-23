@@ -12,7 +12,7 @@ import 'package:transferr/repositories/passenger_repository.dart';
 import 'package:transferr/services/user_service.dart';
 import 'package:transferr/services/excursion_service.dart';
 import 'package:transferr/services/passenger_service.dart';
-import 'package:transferr/services/auth_service.dart'; // Importado
+import 'package:transferr/services/auth_service.dart';
 
 // Providers
 import 'package:transferr/providers/user_provider.dart';
@@ -55,17 +55,14 @@ void main() async {
   final userService = UserService(userRepo);
   final excursionService = ExcursionService(excursionRepo, passengerRepo);
   final passengerService = PassengerService(passengerRepo);
-  final authService = AuthService(
-    userRepo,
-    userService,
-  );
+  final authService = AuthService(userRepo, userService);
 
   runApp(
     MyApp(
       userService: userService,
       excursionService: excursionService,
       passengerService: passengerService,
-      authService: authService, // Passado para o app
+      authService: authService,
     ),
   );
 }
@@ -89,22 +86,17 @@ class MyApp extends StatelessWidget {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => UserProvider(userService)),
-        ChangeNotifierProvider(
-          create: (_) => ExcursionProvider(excursionService),
-        ),
-        ChangeNotifierProvider(
-          create: (_) => PassengerProvider(passengerService),
-        ),
-
-        // AuthProvider agora recebe o Service corretamente
-        ChangeNotifierProxyProvider2<
-          UserProvider,
-          ExcursionProvider,
-          AuthProvider
-        >(
-          create: (_) => AuthProvider(authService),
-          update: (_, userProv, excProv, authProv) =>
-              authProv!..update(userProv, excProv),
+        ChangeNotifierProvider(create: (_) => ExcursionProvider(excursionService)),
+        ChangeNotifierProvider(create: (_) => PassengerProvider(passengerService)),
+        
+        // CORREÇÃO: Usando ProxyProvider apenas para as dependências dinâmicas (outros Providers)
+        // O AuthService e UserService são passados diretamente no construtor de forma segura.
+        ChangeNotifierProxyProvider2<UserProvider, ExcursionProvider, AuthProvider>(
+          create: (_) => AuthProvider(authService, userService),
+          update: (_, userProv, excProv, authProv) {
+            if (authProv == null) return AuthProvider(authService, userService)..update(userProv, excProv);
+            return authProv..update(userProv, excProv);
+          },
         ),
       ],
       child: MaterialApp(
@@ -113,8 +105,7 @@ class MyApp extends StatelessWidget {
         theme: AppTheme.darkTheme,
         initialRoute: '/',
         routes: _buildRoutes(),
-        onUnknownRoute: (settings) =>
-            MaterialPageRoute(builder: (context) => const AuthWrapper()),
+        onUnknownRoute: (settings) => MaterialPageRoute(builder: (context) => const AuthWrapper()),
       ),
     );
   }
@@ -135,9 +126,7 @@ class MyApp extends StatelessWidget {
 
       '/excursion-dashboard': (context) {
         final args = ModalRoute.of(context)?.settings.arguments;
-        return args is String
-            ? ExcursionDashboardPage(excursionId: args)
-            : _errorPage("ID inválido");
+        return args is String ? ExcursionDashboardPage(excursionId: args) : _errorPage("ID inválido");
       },
       '/map-seats': (context) {
         final args = ModalRoute.of(context)?.settings.arguments;
@@ -149,60 +138,32 @@ class MyApp extends StatelessWidget {
             initialSelectedSeat: args['initialSelectedSeat'],
           );
         }
-        return args is String
-            ? ExcursionSeatMapPage(excursionId: args)
-            : _errorPage("Parâmetros inválidos");
+        return args is String ? ExcursionSeatMapPage(excursionId: args) : _errorPage("Parâmetros inválidos");
       },
       '/check-in': (context) {
         final args = ModalRoute.of(context)?.settings.arguments;
-        return args is Map<String, dynamic>
-            ? CheckInPage(
-                excursionId: args['excursionId'],
-                destinationName: args['destinationName'] ?? '',
-              )
-            : _errorPage("Dados incompletos");
+        return args is Map<String, dynamic> ? CheckInPage(excursionId: args['excursionId'], destinationName: args['destinationName'] ?? '') : _errorPage("Dados incompletos");
       },
       '/global-passengers': (context) {
         final args = ModalRoute.of(context)?.settings.arguments;
-        return args is Map<String, dynamic>
-            ? GlobalPassengersPage(
-                excursionId: args['excursionId'],
-                excursionPrice: args['excursionPrice'],
-              )
-            : const GlobalPassengersPage();
+        return args is Map<String, dynamic> ? GlobalPassengersPage(excursionId: args['excursionId'], excursionPrice: args['excursionPrice']) : const GlobalPassengersPage();
       },
       '/passengers-list': (context) {
         final args = ModalRoute.of(context)?.settings.arguments;
-        return args is String
-            ? PassengersListPage(excursionId: args)
-            : _errorPage("ID inválido");
+        return args is String ? PassengersListPage(excursionId: args) : _errorPage("ID inválido");
       },
       '/add-passenger': (context) {
         final args = ModalRoute.of(context)?.settings.arguments;
-        if (args is Map<String, dynamic>)
-          return AddPassengerPage(
-            excursionId: args['excursionId'],
-            excursionPrice: args['excursionPrice'],
-            passenger: args['passenger'],
-          );
-        return args is String
-            ? AddPassengerPage(excursionId: args)
-            : _errorPage("Parâmetros insuficientes");
+        if (args is Map<String, dynamic>) return AddPassengerPage(excursionId: args['excursionId'], excursionPrice: args['excursionPrice'], passenger: args['passenger']);
+        return args is String ? AddPassengerPage(excursionId: args) : _errorPage("Parâmetros insuficientes");
       },
       '/passenger-details': (context) {
         final args = ModalRoute.of(context)?.settings.arguments;
-        return args is Map<String, dynamic>
-            ? PassengerDetailsPage(
-                passenger: args['passenger'],
-                excursionId: args['excursionId'],
-              )
-            : _errorPage("Dados inválidos");
+        return args is Map<String, dynamic> ? PassengerDetailsPage(passenger: args['passenger'], excursionId: args['excursionId']) : _errorPage("Dados inválidos");
       },
       '/excursion-finance': (context) {
         final args = ModalRoute.of(context)?.settings.arguments;
-        return args is Excursion
-            ? ExcursionFinancePage(excursion: args)
-            : _errorPage("Dados inválidos");
+        return args is Excursion ? ExcursionFinancePage(excursion: args) : _errorPage("Dados inválidos");
       },
     };
   }

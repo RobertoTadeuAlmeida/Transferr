@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
+import 'package:provider/provider.dart';
+import '../../../providers/auth_provider.dart';
 
 class PersonalInfoStep extends StatefulWidget {
   final GlobalKey<FormState> formKey;
@@ -24,7 +26,44 @@ class _PersonalInfoStepState extends State<PersonalInfoStep> {
   final _maskCnpj = MaskTextInputFormatter(mask: '##.###.###/####-##', filter: {"#": RegExp(r'[0-9]')});
   final _maskPhone = MaskTextInputFormatter(mask: '(##) #####-####', filter: {"#": RegExp(r'[0-9]')});
 
+  final FocusNode _docFocusNode = FocusNode();
+  String? _documentError;
+  bool _isValidating = false;
+
   bool _isCnpj = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _docFocusNode.addListener(_onDocFocusChange);
+  }
+
+  @override
+  void dispose() {
+    _docFocusNode.removeListener(_onDocFocusChange);
+    _docFocusNode.dispose();
+    super.dispose();
+  }
+
+  /// Valida a unicidade do documento quando o usuário sai do campo.
+  void _onDocFocusChange() async {
+    if (!_docFocusNode.hasFocus) {
+      final doc = widget.controllers['document']?.text ?? '';
+      if (doc.length >= 14) { // Tamanho mínimo de um CPF com máscara
+        setState(() => _isValidating = true);
+        final error = await context.read<AuthProvider>().validateDocument(doc);
+        setState(() {
+          _documentError = error;
+          _isValidating = false;
+        });
+        
+        // Se houver erro, força a revalidação do formulário para exibir a mensagem
+        if (error != null) {
+          widget.formKey.currentState?.validate();
+        }
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -62,7 +101,6 @@ class _PersonalInfoStepState extends State<PersonalInfoStep> {
               ],
               onChanged: (v) {
                 widget.onProfileChanged(v);
-                // Reseta o nome da empresa se mudar para Agente
                 if (v == 'AGENTE') {
                   widget.controllers['company']?.clear();
                 }
@@ -71,7 +109,6 @@ class _PersonalInfoStepState extends State<PersonalInfoStep> {
             
             const SizedBox(height: 16),
             
-            // O nome da empresa agora é opcional para Agentes (fluxo SaaS)
             TextFormField(
               controller: widget.controllers['company'],
               decoration: InputDecoration(
@@ -104,6 +141,7 @@ class _PersonalInfoStepState extends State<PersonalInfoStep> {
                 setState(() {
                   _isCnpj = newSelection.first;
                   widget.controllers['document']?.clear();
+                  _documentError = null; // Limpa erro ao trocar tipo
                 });
               },
             ),
@@ -111,6 +149,7 @@ class _PersonalInfoStepState extends State<PersonalInfoStep> {
             const SizedBox(height: 16),
             TextFormField(
               controller: widget.controllers['document'],
+              focusNode: _docFocusNode,
               inputFormatters: [_isCnpj ? _maskCnpj : _maskCpf],
               keyboardType: TextInputType.number,
               decoration: InputDecoration(
@@ -118,12 +157,18 @@ class _PersonalInfoStepState extends State<PersonalInfoStep> {
                 prefixIcon: const Icon(Icons.badge_outlined),
                 border: const OutlineInputBorder(),
                 hintText: _isCnpj ? "00.000.000/0000-00" : "000.000.000-00",
+                suffixIcon: _isValidating 
+                  ? const SizedBox(width: 20, height: 20, child: Padding(padding: EdgeInsets.all(10), child: CircularProgressIndicator(strokeWidth: 2))) 
+                  : (_documentError != null ? const Icon(Icons.error_outline, color: Colors.red) : null),
               ),
+              onChanged: (v) {
+                if (_documentError != null) setState(() => _documentError = null);
+              },
               validator: (v) {
                 if (v == null || v.isEmpty) return 'Obrigatório para segurança dos dados.';
                 if (_isCnpj && v.length < 18) return 'CNPJ incompleto';
                 if (!_isCnpj && v.length < 14) return 'CPF incompleto';
-                return null;
+                return _documentError; // Retorna o erro vindo do Firebase
               },
             ),
 

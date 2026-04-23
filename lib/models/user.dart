@@ -2,17 +2,17 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 class User {
   final String id;
-  final String company; // Empresa ativa no momento
+  final String company; 
   final String companyName;
-  final List<String> companies; // Lista de IDs das empresas que ele pertence
-  final Map<String, String> roles; // { "id_empresa": "ADMIN" ou "AGENTE" }
+  final List<String> companies; 
+  final Map<String, String> roles; // { "id_empresa": "OWNER", "ADMIN" ou "AGENTE" }
   final String name; 
   final String email;
   final String phone;
   final String document;
   final String password;
   final DateTime birthDate;
-  final String profile; // Perfil global (último papel ou papel principal)
+  final String profile; 
   final bool isActive;
 
   final String zipCode;
@@ -50,13 +50,21 @@ class User {
   });
 
   // ===========================================================================
-  // ----------- GETTERS DE COMPATIBILIDADE E LOGICA -----------
+  // ----------- GETTERS DE LOGICA MULTI-TENANT -----------
   // ===========================================================================
 
-  /// Verifica se o usuário é ADMIN (Global ou na empresa atual)
-  bool get isAdmin => profile.toUpperCase() == 'ADMIN' || roles[company] == 'ADMIN';
+  /// O papel atual do usuário na empresa que ele está acessando
+  String get currentRole => roles[company]?.toUpperCase() ?? 'AGENTE';
+
+  /// ADMIN ou OWNER são considerados administradores
+  bool get isAdmin => profile.toUpperCase() == 'ADMIN' || 
+                      profile.toUpperCase() == 'OWNER' ||
+                      currentRole == 'ADMIN' || 
+                      currentRole == 'OWNER';
   
-  /// Verifica se o usuário é AGENTE
+  /// Apenas o OWNER tem a "coroa"
+  bool get isOwner => currentRole == 'OWNER';
+
   bool get isAgente => !isAdmin;
 
   bool get hasNoCompany => companies.isEmpty && company.isEmpty;
@@ -86,24 +94,12 @@ class User {
   }
 
   factory User.fromMap(String id, Map<String, dynamic> map) {
-    final String activeCompany = map['empresa'] ?? '';
-    
-    Map<String, String> rolesMap = {};
-    if (map['papeis'] != null) {
-      rolesMap = Map<String, String>.from(map['papeis']);
-    }
-
-    List<String> companiesList = [];
-    if (map['empresas'] != null) {
-      companiesList = List<String>.from(map['empresas']);
-    }
-
     return User(
       id: id,
-      company: activeCompany,
+      company: map['empresa'] ?? '',
       companyName: map['nomeEmpresa'] ?? '',
-      companies: companiesList,
-      roles: rolesMap,
+      companies: List<String>.from(map['empresas'] ?? []),
+      roles: Map<String, String>.from(map['papeis'] ?? {}),
       name: map['nome'] ?? '',
       email: map['email'] ?? '',
       phone: map['telefone'] ?? '',
@@ -144,6 +140,7 @@ class User {
     String? city,
     String? state,
     DateTime? updatedAt,
+    DateTime? createdAt,
   }) {
     return User(
       id: id ?? this.id,
@@ -165,7 +162,7 @@ class User {
       neighborhood: neighborhood ?? this.neighborhood,
       city: city ?? this.city,
       state: state ?? this.state,
-      createdAt: createdAt,
+      createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
   }

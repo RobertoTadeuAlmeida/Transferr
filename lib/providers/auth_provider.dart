@@ -2,11 +2,14 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../models/user.dart';
 import '../services/auth_service.dart';
+import '../services/user_service.dart';
 import 'user_provider.dart';
 import 'excursion_provider.dart';
 
 class AuthProvider with ChangeNotifier {
   final AuthService _authService;
+  UserService _userService; // Removido final para permitir atualização via update se necessário
+  
   StreamSubscription? _authSubscription;
   
   UserProvider? _userProvider;
@@ -21,13 +24,22 @@ class AuthProvider with ChangeNotifier {
   String? get errorMessage => _errorMessage;
   bool get isAuthenticated => _currentUser != null;
 
-  AuthProvider(this._authService) {
+  bool get isOwner => _currentUser?.isOwner ?? false;
+  bool get isAdmin => _currentUser?.isAdmin ?? false;
+  bool get isAgente => _currentUser?.isAgente ?? true;
+  bool get hasNoCompany => _currentUser?.hasNoCompany ?? true;
+
+  AuthProvider(this._authService, this._userService) {
     _init();
   }
 
-  void update(UserProvider userProvider, ExcursionProvider excursionProvider) {
+  // Método update agora recebe também o userService se necessário, garantindo que nunca seja nulo
+  void update(UserProvider userProvider, ExcursionProvider excursionProvider, {UserService? userService}) {
     _userProvider = userProvider;
     _excursionProvider = excursionProvider;
+    if (userService != null) {
+      _userService = userService;
+    }
   }
 
   void _init() {
@@ -41,22 +53,44 @@ class AuthProvider with ChangeNotifier {
     });
   }
 
+  Future<String?> validateDocument(String document) async {
+    _clearError();
+    try {
+      final error = await _userService.validateDocumentUniqueness(document, _currentUser?.id ?? '');
+      if (error != null) {
+        _errorMessage = error;
+        notifyListeners();
+      }
+      return error;
+    } catch (e) {
+      debugPrint("⚠️ AUTH_PROVIDER: Erro ao validar documento: $e");
+      return "Erro ao validar documento. Verifique sua conexão.";
+    }
+  }
+
   Future<void> refreshUser([String? uid]) async {
     final targetUid = uid ?? _currentUser?.id;
     if (targetUid == null) return;
 
     try {
       final user = await _authService.getUserData(targetUid);
+      
       if (user != null) {
+        if (!user.isActive) {
+          _errorMessage = "Sua conta foi desativada.";
+          await logout();
+          return;
+        }
         _currentUser = user;
         notifyListeners();
+      } else {
+        await logout();
       }
     } catch (e) {
       debugPrint("⚠️ AUTH_PROVIDER: Erro ao dar refresh no usuário: $e");
     }
   }
 
-  // RESTAURADO: Método para criar empresa (usado na PendingCompanyPage)
   Future<void> createCompany(String companyName) async {
     if (_currentUser == null) return;
     _clearError();
@@ -72,7 +106,6 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
-  // RESTAURADO: Método para trocar empresa (usado na MyCompanyPage)
   Future<void> switchCompany(String companyId) async {
     if (_currentUser == null) return;
     _setLoading(true);
@@ -87,7 +120,34 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
-  // RESTAURADO: Método de registro (usado na RegistrationPage)
+  Future<void> respondToInvite(String inviteId, String status, String companyId) async {
+    if (_currentUser == null) return;
+    _setLoading(true);
+    try {
+      await _authService.respondToInvite(inviteId, status, _currentUser!, companyId);
+      await refreshUser();
+    } catch (e) {
+      _errorMessage = e.toString();
+      rethrow;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  Future<void> transferOwnership(String targetUserId, String companyId) async {
+    if (_currentUser == null) return;
+    _setLoading(true);
+    try {
+      await _authService.transferOwnership(_currentUser!, targetUserId, companyId);
+      await refreshUser();
+    } catch (e) {
+      _errorMessage = e.toString();
+      rethrow;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
   Future<void> register(User user, String password) async {
     _clearError();
     _setLoading(true);
