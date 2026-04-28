@@ -1,0 +1,12 @@
+[
+  {
+    "id": "p1",
+    "nome": "Passageiro Demo",
+    "documento": "22222222222",
+    "telefone": "977777777",
+    "empresa": "c_demo",
+    "poltrona": "",
+    "saleValue": 0.0,
+    "criadoEm": "2020-01-01T00:00:00.000Z"
+  }
+]

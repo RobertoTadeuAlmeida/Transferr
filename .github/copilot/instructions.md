@@ -1,77 +1,31 @@
-# Copilot Instructions - Projeto Transferr
+Com base nos arquivos:
 
-Você é um engenheiro de software sênior especializado em Flutter, arquitetura de aplicações móveis e revisão de código para produção.
+* docs/ACTIONS_MODO_DEMO.md
+* docs/REVIE_ACTION_MODO_DEMO.md
 
-## Contexto
+Implemente completamente o Modo Demo no projeto.
 
-Este é um projeto Flutter em desenvolvimento. Sua função é analisar o projeto COMPLETO, considerando:
+REGRAS:
 
-* Estrutura de diretórios
-* Arquivos Dart
-* Dependências (pubspec.yaml)
-* Organização do código
-* Padrões arquiteturais
+* Pode criar e modificar arquivos necessários
+* NÃO apenas documente — EXECUTE as alterações no código
+* Siga a arquitetura existente (Provider, Services, Repositories)
+* Utilize os arquivos de plano como guia
 
-## Regras obrigatórias
+ETAPAS:
 
-* Analise todos os arquivos recursivamente
-* Não forneça respostas genéricas
-* Baseie-se apenas no estado real do código
-* Não invente funcionalidades inexistentes
-* Gere um arquivo na raiz do projeto com o nome:
+1. Criar estrutura de mock em lib/mock/
+2. Implementar repositories mock
+3. Criar DemoModeProvider
+4. Implementar RepositoryFactory
+5. Adicionar botão de ativação na tela de login
+6. Garantir que o app funcione sem Firebase quando modo demo estiver ativo
 
-**REVIEW_PROJETO_TRANSFERR.md**
+IMPORTANTE:
 
-## Estrutura da resposta
+* Mostre claramente quais arquivos foram criados/modificados
+* Aplique as mudanças no projeto
+* Não gere apenas explicação
 
-O arquivo gerado deve conter:
-
-### 1. Arquitetura identificada no projeto
-
-* Identificação do padrão (MVC, MVVM, Clean, etc.)
-* Descrição da organização atual
-* Problemas e inconsistências
-
-### 2. Estado atual do projeto
-
-* Funcionalidades implementadas
-* Qualidade do código
-* Pontos fortes e fracos
-
-### 3. O que falta para ser um MVP apresentável
-
-* Funcionalidades essenciais ausentes
-* Melhorias mínimas de interface
-* Ajustes para demonstração
-
-### 4. O que falta para publicação nas lojas
-
-* Requisitos técnicos
-* Performance
-* Segurança
-* Tratamento de erros
-* Configuração de produção
-
-### 5. Prioridade de implementação
-
-Separe em:
-
-* Alta prioridade
-* Média prioridade
-* Baixa prioridade
-
-### 6. Sugestões de melhoria
-
-* Arquitetura
-* Refatoração
-* Boas práticas
-
-## Formato
-
-* Utilize Markdown
-* Estruture com títulos e listas
-* Seja claro, direto e técnico
-
-## Objetivo
-
-Gerar arquivo utilizável REVIEW_PROJETO_TRANSFERR.md na raiz do projeto como guia real de evolução do projeto até produção.
+OBJETIVO:
+Ter o modo demo funcional no código, não apenas documentado.

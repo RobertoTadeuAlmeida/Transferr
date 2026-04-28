@@ -3,6 +3,9 @@ import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:transferr/firebase_options.dart';
 
+import 'config/demo_config.dart';
+import 'demo_app.dart';
+
 // Repositories
 import 'package:transferr/repositories/user_repository.dart';
 import 'package:transferr/repositories/excursion_repository.dart';
@@ -46,6 +49,15 @@ import 'models/excursion.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await DemoConfig.init();
+
+  if (DemoConfig.isDemoMode) {
+    // Start a lightweight demo-only app that doesn't touch Firebase
+    runApp(DemoApp());
+    return;
+  }
+
+  // Normal (non-demo) startup
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
   final userRepo = UserRepository();

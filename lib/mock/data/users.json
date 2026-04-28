@@ -1,0 +1,23 @@
+[
+  {
+    "id": "u_admin",
+    "empresa": "c_demo",
+    "nomeEmpresa": "Demo Transportes",
+    "empresas": ["c_demo"],
+    "papeis": {"c_demo": "OWNER"},
+    "nome": "Admin Demo",
+    "email": "admin@demo.com",
+    "telefone": "999999999",
+    "documento": "00000000000",
+    "dataNascimento": "2020-01-01T00:00:00.000Z",
+    "perfil": "OWNER",
+    "isActive": true,
+    "cep": "",
+    "endereco": "",
+    "numero": "",
+    "bairro": "",
+    "cidade": "",
+    "estado": "",
+    "criadoEm": "2020-01-01T00:00:00.000Z"
+  }
+]
