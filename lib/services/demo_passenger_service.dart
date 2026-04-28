@@ -18,7 +18,7 @@ class DemoPassengerService {
       seatNumber: '',
       saleValue: 0.0,
       createdAt: now,
-      updatedAt: now,
+      lastUpdate: now,
     ));
     _emit();
   }
